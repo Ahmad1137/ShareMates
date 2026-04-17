@@ -13,7 +13,8 @@ CREATE TABLE users (
 CREATE TABLE groups (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
-  created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT
+  created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  created_at timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE members (
@@ -31,7 +32,8 @@ CREATE TABLE expenses (
   group_id uuid NOT NULL REFERENCES groups (id) ON DELETE CASCADE,
   paid_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
   amount numeric(14, 2) NOT NULL CHECK (amount > 0),
-  description text NOT NULL DEFAULT ''
+  description text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_expenses_group_id ON expenses (group_id);

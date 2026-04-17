@@ -5,7 +5,9 @@ import { NextResponse } from "next/server";
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  const next = url.searchParams.get("next") ?? "/";
+  const rawNext = url.searchParams.get("next");
+  const next =
+    rawNext && rawNext.startsWith("/") ? rawNext : "/dashboard";
 
   if (code) {
     const cookieStore = await cookies();

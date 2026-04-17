@@ -1,11 +1,19 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
+import { Lock, LogIn, Mail } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export function LoginForm() {
+function normalizeNext(nextPath: string): string {
+  return nextPath.startsWith("/") ? nextPath : "/dashboard";
+}
+
+export function LoginForm({ nextPath }: { nextPath: string }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,72 +39,72 @@ export function LoginForm() {
     }
 
     router.refresh();
-    router.push("/");
+    router.push(normalizeNext(nextPath));
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="flex w-full max-w-sm flex-col gap-4"
-    >
-      <div>
-        <label
-          htmlFor="login-email"
-          className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-        >
-          Email
-        </label>
-        <input
-          id="login-email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 shadow-sm outline-none ring-zinc-400 placeholder:text-zinc-400 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-500/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-500"
-          placeholder="you@example.com"
-        />
+    <form onSubmit={handleSubmit} className="grid gap-5">
+      <div className="grid gap-2">
+        <Label htmlFor="login-email">Email</Label>
+        <div className="relative">
+          <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            id="login-email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            className="pl-9"
+          />
+        </div>
       </div>
-      <div>
-        <label
-          htmlFor="login-password"
-          className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-        >
-          Password
-        </label>
-        <input
-          id="login-password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 shadow-sm outline-none ring-zinc-400 placeholder:text-zinc-400 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-500/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-500"
-          placeholder="••••••••"
-        />
+      <div className="grid gap-2">
+        <Label htmlFor="login-password">Password</Label>
+        <div className="relative">
+          <Lock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            id="login-password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            className="pl-9"
+          />
+        </div>
       </div>
       {error ? (
         <p
-          className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300"
+          className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm text-destructive animate-fade-in"
           role="alert"
         >
           {error}
         </p>
       ) : null}
-      <button
+      <Button
         type="submit"
         disabled={loading}
-        className="rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+        className="btn-gradient group h-11 border-0 text-white shadow-glow"
       >
-        {loading ? "Signing in…" : "Sign in"}
-      </button>
-      <p className="text-center text-sm text-zinc-600 dark:text-zinc-400">
+        {loading ? (
+          "Signing in…"
+        ) : (
+          <>
+            <LogIn className="mr-2 size-4 transition-transform group-hover:translate-x-0.5" />
+            Sign in
+          </>
+        )}
+      </Button>
+      <p className="text-center text-sm text-muted-foreground">
         No account?{" "}
         <Link
-          href="/signup"
-          className="font-medium text-zinc-900 underline-offset-4 hover:underline dark:text-zinc-100"
+          href={`/signup?next=${encodeURIComponent(normalizeNext(nextPath))}`}
+          className="font-medium text-emerald-700 underline-offset-4 hover:underline dark:text-emerald-400"
         >
           Sign up
         </Link>
