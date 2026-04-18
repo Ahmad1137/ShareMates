@@ -40,8 +40,7 @@ export function AppSidebar({ user }: { user: AppUser }) {
   async function signOut() {
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
+    router.replace("/login");
   }
 
   const initials =

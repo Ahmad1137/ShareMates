@@ -24,14 +24,9 @@ export async function requireUser(): Promise<AppUser> {
     email.split("@")[0] ??
     "User";
 
-  const { error } = await supabase.from("users").upsert(
-    { id: user.id, email, name },
-    { onConflict: "id" },
-  );
-
-  if (error) {
-    console.error("users upsert:", error.message);
-  }
+  // Avoid a DB upsert on every navigation — that added ~1 round-trip per
+  // request and stacked with middleware getUser(). New auth users are inserted
+  // via the `on_auth_user_created` trigger on public.users.
 
   return { id: user.id, email, name };
 }

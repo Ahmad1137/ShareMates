@@ -2,6 +2,7 @@
 
 import { requireUser } from "@/lib/auth";
 import { sendInviteEmail } from "@/lib/email/send-invite-email";
+import { getPublicSiteOrigin } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -113,11 +114,7 @@ export async function addMemberByEmail(groupId: string, email: string) {
   }
 
   revalidatePath(`/group/${groupId}`);
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ??
-    process.env.NEXT_PUBLIC_SITE_URL ??
-    "http://localhost:3000";
-  const inviteUrl = `${appUrl.replace(/\/$/, "")}/invite/${inviteToken}`;
+  const inviteUrl = `${getPublicSiteOrigin()}/invite/${inviteToken}`;
   const emailResult = await sendInviteEmail({
     to: normalized,
     groupName: group.name,

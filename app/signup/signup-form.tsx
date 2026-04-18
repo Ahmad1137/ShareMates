@@ -47,8 +47,7 @@ export function SignupForm({ nextPath }: { nextPath: string }) {
     }
 
     if (data.session) {
-      router.refresh();
-      router.push(normalizedNext);
+      router.replace(normalizedNext);
       return;
     }
 

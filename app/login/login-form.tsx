@@ -38,8 +38,8 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
       return;
     }
 
-    router.refresh();
-    router.push(normalizeNext(nextPath));
+    // Single navigation; avoid refresh + push (two full RSC passes).
+    router.replace(normalizeNext(nextPath));
   }
 
   return (
