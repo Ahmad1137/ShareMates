@@ -335,11 +335,14 @@ export default async function GroupDetailPage({ params }: PageProps) {
               </TableHeader>
               <TableBody>
                 {(expenseRows ?? []).map((e) => {
-                  const row = e as {
-                    spent_on?: string | null;
+                  const ex = e as {
+                    spent_on?: unknown;
                     created_at?: string | null;
                   };
-                  const when = formatExpenseDay(row.spent_on, row.created_at ?? null);
+                  const when = formatExpenseDay(
+                    ex.spent_on,
+                    ex.created_at ?? null,
+                  );
                   const splitsFor = splitRows.filter(
                     (s) => s.expense_id === e.id,
                   );

@@ -1,9 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 function isMissingColumn(message: string, col: string): boolean {
+  if (!message.includes(col)) {
+    return false;
+  }
   return (
-    message.includes(col) &&
-    (message.includes("does not exist") || message.includes("schema cache"))
+    message.includes("does not exist") ||
+    message.includes("schema cache") ||
+    message.includes("Could not find")
   );
 }
 

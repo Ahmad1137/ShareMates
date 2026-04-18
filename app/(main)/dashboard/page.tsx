@@ -248,13 +248,13 @@ export default async function DashboardPage() {
               <TableBody>
                 {(expenses ?? []).map((e) => {
                   const g = e.groups as unknown as { name: string } | null;
-                  const row = e as {
-                    spent_on?: string | null;
+                  const ex = e as {
+                    spent_on?: unknown;
                     created_at?: string | null;
                   };
                   const when = formatExpenseDay(
-                    row.spent_on,
-                    row.created_at ?? null,
+                    ex.spent_on,
+                    ex.created_at ?? null,
                     true,
                   );
                   return (
