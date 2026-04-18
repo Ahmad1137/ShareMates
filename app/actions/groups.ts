@@ -24,29 +24,23 @@ export async function createGroup(formData: FormData) {
     return { error: profileError.message };
   }
 
-  const { data: group, error } = await supabase
-    .from("groups")
-    .insert({ name, created_by: user.id })
-    .select("id")
-    .single();
+  const { data: groupId, error } = await supabase.rpc(
+    "create_group_with_owner",
+    { p_name: name },
+  );
 
-  if (error || !group) {
-    return { error: error?.message ?? "Could not create group." };
-  }
-
-  const { error: memberError } = await supabase.from("members").insert({
-    group_id: group.id,
-    user_id: user.id,
-  });
-
-  if (memberError) {
-    return { error: memberError.message };
+  if (error || !groupId) {
+    return {
+      error:
+        error?.message ??
+        "Could not create group. Run db/008_create_group_with_owner_rpc.sql in Supabase SQL Editor.",
+    };
   }
 
   revalidatePath("/groups");
   revalidatePath("/dashboard");
-  revalidatePath(`/group/${group.id}`);
-  redirect(`/group/${group.id}`);
+  revalidatePath(`/group/${groupId}`);
+  redirect(`/group/${groupId}`);
 }
 
 export async function addMemberByEmail(groupId: string, email: string) {
