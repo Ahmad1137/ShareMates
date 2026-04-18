@@ -69,7 +69,7 @@ export async function createExpenseWithEqualSplits(input: {
   let expenseResult = await supabase
     .from("expenses")
     .insert(insertPayload)
-    .select("id")
+    .select("id, spent_on, created_at")
     .single();
 
   const msg = expenseResult.error?.message ?? "";
@@ -89,7 +89,7 @@ export async function createExpenseWithEqualSplits(input: {
         amount: amt,
         description: desc,
       })
-      .select("id")
+      .select("id, spent_on, created_at")
       .single();
   }
 
