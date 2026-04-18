@@ -58,17 +58,43 @@ export async function createExpenseWithEqualSplits(input: {
     return { error: e instanceof Error ? e.message : "Invalid split." };
   }
 
-  const { data: expense, error: eErr } = await supabase
+   const insertPayload = {
+    group_id: input.groupId,
+    paid_by: user.id,
+    amount,
+    description,
+    spent_on: spentOn,
+  };
+
+  let expenseResult = await supabase
     .from("expenses")
-    .insert({
-      group_id: input.groupId,
-      paid_by: user.id,
-      amount,
-      description,
-      spent_on: spentOn,
-    })
+    .insert(insertPayload)
     .select("id")
     .single();
+
+  const msg = expenseResult.error?.message ?? "";
+  const spentOnUnavailable =
+    msg.includes("spent_on") &&
+    (msg.includes("schema cache") ||
+      msg.includes("does not exist") ||
+      msg.includes("Could not find"));
+
+  if (spentOnUnavailable) {
+    const { group_id, paid_by, amount: amt, description: desc } = insertPayload;
+    expenseResult = await supabase
+      .from("expenses")
+      .insert({
+        group_id,
+        paid_by,
+        amount: amt,
+        description: desc,
+      })
+      .select("id")
+      .single();
+  }
+
+  const expense = expenseResult.data;
+  const eErr = expenseResult.error;
 
   if (eErr || !expense) {
     return { error: eErr?.message ?? "Could not save expense." };

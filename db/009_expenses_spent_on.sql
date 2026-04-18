@@ -17,3 +17,6 @@ ALTER TABLE public.expenses
   ALTER COLUMN spent_on SET NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_expenses_spent_on ON public.expenses (spent_on);
+
+-- Refresh PostgREST so the API stops saying "schema cache" / unknown column.
+NOTIFY pgrst, 'reload schema';
