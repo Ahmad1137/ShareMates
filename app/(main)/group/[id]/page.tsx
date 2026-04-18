@@ -13,7 +13,10 @@ import {
 } from "@/components/ui/table";
 import { computeGroupBalances } from "@/lib/balances";
 import { requireUser } from "@/lib/auth";
+import { fetchExpensesForGroup } from "@/lib/expense-queries";
 import { createClient } from "@/lib/supabase/server";
+import { Crown, Receipt, Users } from "lucide-react";
+import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
@@ -34,7 +37,25 @@ export async function generateMetadata({
   return { title: group?.name ? `${group.name}` : "Group" };
 }
 
+const GRADIENTS = [
+  "from-emerald-500 to-teal-600",
+  "from-teal-500 to-cyan-600",
+  "from-cyan-500 to-sky-600",
+  "from-sky-500 to-indigo-600",
+  "from-indigo-500 to-purple-600",
+  "from-purple-500 to-pink-600",
+  "from-pink-500 to-rose-600",
+  "from-rose-500 to-orange-600",
+];
+
+function gradientFor(id: string) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return GRADIENTS[h % GRADIENTS.length];
+}
+
 export default async function GroupDetailPage({ params }: PageProps) {
+  await connection();
   const { id: groupId } = await params;
   const user = await requireUser();
   const supabase = await createClient();
@@ -92,20 +113,21 @@ export default async function GroupDetailPage({ params }: PageProps) {
     }
   }
 
-  const { data: expenseRows } = await supabase
-    .from("expenses")
-    .select("id, amount, description, created_at, paid_by")
-    .eq("group_id", groupId)
-    .order("created_at", { ascending: false });
+  const {
+    data: expenseRows,
+    error: expensesError,
+  } = await fetchExpensesForGroup(supabase, groupId);
 
   const expenseIds = (expenseRows ?? []).map((e) => e.id);
-  const { data: splitRows } =
+  const splitsRes =
     expenseIds.length > 0
       ? await supabase
           .from("splits")
           .select("expense_id, user_id, amount")
           .in("expense_id", expenseIds)
-      : { data: [] };
+      : { data: [] as { expense_id: string; user_id: string; amount: number }[], error: null };
+  const splitRows = splitsRes.data ?? [];
+  const splitsError = splitsRes.error;
 
   const memberUserIds = [...new Set(members.map((m) => m.user_id))];
 
@@ -115,7 +137,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
       amount: e.amount,
       paid_by: e.paid_by,
     })),
-    splitRows ?? [],
+    splitRows,
     userNames,
     memberUserIds,
   );
@@ -132,35 +154,82 @@ export default async function GroupDetailPage({ params }: PageProps) {
     }
   }
 
+  const totalSpent = (expenseRows ?? []).reduce(
+    (sum, e) => sum + Number(e.amount),
+    0,
+  );
+
+  const initials = group.name
+    .split(" ")
+    .filter((s: string) => Boolean(s))
+    .slice(0, 2)
+    .map((p: string) => p[0]?.toUpperCase() ?? "")
+    .join("") || "G";
+
   return (
     <div className="mx-auto max-w-6xl space-y-8 p-4 md:p-8">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-3xl font-semibold tracking-tight">
-              {group.name}
-            </h1>
-            {isCreator ? (
-              <Badge variant="secondary" className="text-xs">
-                You created this group
-              </Badge>
-            ) : null}
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Balances show who fronted cash vs. their share (equal splits).
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <AddMemberDialog groupId={groupId} />
-          <AddExpenseDialog
-            groupId={groupId}
-            memberCount={members.length}
+      {/* Hero */}
+      <div className="animate-fade-up">
+        <div className="relative overflow-hidden rounded-3xl border border-border/60 bg-card/70 p-6 shadow-card backdrop-blur md:p-8">
+          <div
+            aria-hidden
+            className={`pointer-events-none absolute -right-16 -top-16 size-64 rounded-full bg-gradient-to-br ${gradientFor(group.id)} opacity-15 blur-3xl`}
           />
+          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex items-start gap-4">
+              <span
+                className={`flex size-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${gradientFor(group.id)} text-lg font-bold text-white shadow-glow`}
+              >
+                {initials}
+              </span>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
+                    {group.name}
+                  </h1>
+                  {isCreator ? (
+                    <Badge
+                      variant="secondary"
+                      className="gap-1 bg-amber-500/15 text-xs text-amber-700 dark:text-amber-400"
+                    >
+                      <Crown className="size-3" />
+                      Creator
+                    </Badge>
+                  ) : null}
+                </div>
+                <p className="mt-1.5 text-sm text-muted-foreground">
+                  Balances show who fronted cash vs. their share (equal splits).
+                </p>
+                <div className="mt-3 flex flex-wrap gap-4 text-xs">
+                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                    <Users className="size-3.5" />
+                    {members.length}{" "}
+                    {members.length === 1 ? "member" : "members"}
+                  </span>
+                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                    <Receipt className="size-3.5" />
+                    {(expenseRows ?? []).length} expenses
+                  </span>
+                  <span className="flex items-center gap-1.5 font-mono font-medium text-foreground">
+                    ${totalSpent.toFixed(2)} total
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <AddMemberDialog groupId={groupId} />
+              <AddExpenseDialog
+                groupId={groupId}
+                memberCount={members.length}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-5">
-        <Card className="border-border/80 shadow-sm lg:col-span-3">
+      {/* Balances + Members */}
+      <div className="grid gap-6 animate-fade-up [animation-delay:80ms] lg:grid-cols-5">
+        <Card className="border-border/60 bg-card/70 shadow-card backdrop-blur lg:col-span-3">
           <CardHeader>
             <CardTitle className="text-lg">Group balances</CardTitle>
             <CardDescription>
@@ -173,16 +242,16 @@ export default async function GroupDetailPage({ params }: PageProps) {
           </CardContent>
         </Card>
 
-        <Card className="border-border/80 shadow-sm lg:col-span-2">
+        <Card className="border-border/60 bg-card/70 shadow-card backdrop-blur lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-lg">Members</CardTitle>
             <CardDescription>{members.length} people</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-2.5">
             {members.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No members — you should be added automatically when you create a
-                group.
+                No members — you should be added automatically when you create
+                a group.
               </p>
             ) : (
               members.map((m) => {
@@ -190,13 +259,24 @@ export default async function GroupDetailPage({ params }: PageProps) {
                 const label = u?.name ?? "Member";
                 const email = u?.email ?? "";
                 const self = u?.id === user.id;
+                const memberInitials = label
+                  .split(" ")
+                  .filter((s: string) => Boolean(s))
+                  .slice(0, 2)
+                  .map((p: string) => p[0]?.toUpperCase() ?? "")
+                  .join("") || "U";
                 return (
                   <div
                     key={m.user_id}
-                    className="flex items-center justify-between rounded-lg border border-border/60 bg-card/50 px-3 py-2"
+                    className="flex items-center gap-3 rounded-xl border border-border/50 bg-background/50 px-3 py-2.5 transition-colors hover:bg-accent/40"
                   >
-                    <div>
-                      <p className="text-sm font-medium">
+                    <span
+                      className={`flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${gradientFor(m.user_id)} text-xs font-semibold text-white shadow-glow`}
+                    >
+                      {memberInitials}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">
                         {label}
                         {self ? (
                           <span className="ml-2 text-xs font-normal text-muted-foreground">
@@ -204,7 +284,9 @@ export default async function GroupDetailPage({ params }: PageProps) {
                           </span>
                         ) : null}
                       </p>
-                      <p className="text-xs text-muted-foreground">{email}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {email}
+                      </p>
                     </div>
                   </div>
                 );
@@ -214,7 +296,8 @@ export default async function GroupDetailPage({ params }: PageProps) {
         </Card>
       </div>
 
-      <Card className="shadow-sm">
+      {/* Expenses */}
+      <Card className="border-border/60 bg-card/70 shadow-card backdrop-blur animate-fade-up [animation-delay:160ms]">
         <CardHeader>
           <CardTitle>Expenses</CardTitle>
           <CardDescription>
@@ -222,10 +305,23 @@ export default async function GroupDetailPage({ params }: PageProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="px-0 sm:px-6">
-          {(expenseRows ?? []).length === 0 ? (
-            <p className="px-6 pb-6 text-sm text-muted-foreground">
-              No expenses yet. Add the first one to see balances update.
-            </p>
+          {expensesError || splitsError ? (
+            <div className="px-6 pb-6">
+              <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+                {expensesError?.message ??
+                  splitsError?.message ??
+                  "Could not load expenses."}
+              </p>
+            </div>
+          ) : (expenseRows ?? []).length === 0 ? (
+            <div className="px-6 pb-6 text-center">
+              <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted/60">
+                <Receipt className="size-5 text-muted-foreground" />
+              </div>
+              <p className="mt-3 text-sm text-muted-foreground">
+                No expenses yet. Add the first one to see balances update.
+              </p>
+            </div>
           ) : (
             <Table>
               <TableHeader>
@@ -245,7 +341,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
                         year: "numeric",
                       })
                     : "—";
-                  const splitsFor = (splitRows ?? []).filter(
+                  const splitsFor = splitRows.filter(
                     (s) => s.expense_id === e.id,
                   );
                   const splitLabel =
@@ -253,7 +349,10 @@ export default async function GroupDetailPage({ params }: PageProps) {
                       ? `${splitsFor.length}-way split`
                       : "—";
                   return (
-                    <TableRow key={e.id}>
+                    <TableRow
+                      key={e.id}
+                      className="transition-colors hover:bg-accent/40"
+                    >
                       <TableCell className="text-muted-foreground">
                         {when}
                       </TableCell>
@@ -266,7 +365,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
                       <TableCell>
                         {payerNameMap.get(e.paid_by) ?? "—"}
                       </TableCell>
-                      <TableCell className="text-right font-mono font-medium tabular-nums">
+                      <TableCell className="text-right font-mono font-semibold tabular-nums">
                         ${Number(e.amount).toFixed(2)}
                       </TableCell>
                     </TableRow>

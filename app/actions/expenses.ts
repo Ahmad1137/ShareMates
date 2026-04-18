@@ -68,7 +68,10 @@ export async function createExpenseWithEqualSplits(input: {
     return { error: sErr.message };
   }
 
-  revalidatePath(`/group/${input.groupId}`);
+  const groupPath = `/group/${input.groupId}`;
+  revalidatePath(groupPath, "page");
+  revalidatePath(groupPath, "layout");
+  revalidatePath("/groups");
   revalidatePath("/dashboard");
   return { ok: true as const };
 }
