@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { addContact } from "@/app/actions/debt";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export function AddContactForm() {
+  const router = useRouter();
   const [msg, setMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -18,8 +20,8 @@ export function AddContactForm() {
     const res = await addContact(fd);
     setPending(false);
     if (res.ok) {
-      setMsg({ tone: "ok", text: "Contact added." });
-      (e.currentTarget as HTMLFormElement).reset();
+      router.refresh();
+      router.replace("/contacts");
     } else setMsg({ tone: "err", text: res.error });
   }
 

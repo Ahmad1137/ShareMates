@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { addRelayTransaction, addTransaction } from "@/app/actions/debt";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ export type RegisteredContactOption = {
 type Flow = "i_gave" | "i_received" | "settled";
 
 export function LedgerForms({ registeredContacts }: { registeredContacts: RegisteredContactOption[] }) {
+  const router = useRouter();
   const [flow, setFlow] = useState<Flow>("i_gave");
   const [settleDirection, setSettleDirection] = useState<"i_paid_them" | "they_paid_me">("i_paid_them");
   const [msg, setMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
@@ -39,8 +41,9 @@ export function LedgerForms({ registeredContacts }: { registeredContacts: Regist
     });
     setPending(false);
     if (res.ok) {
-      setMsg({ tone: "ok", text: "Saved." });
       (e.currentTarget as HTMLFormElement).reset();
+      router.refresh();
+      router.push("/contacts");
     } else setMsg({ tone: "err", text: res.error });
   }
 
@@ -56,8 +59,9 @@ export function LedgerForms({ registeredContacts }: { registeredContacts: Regist
     const res = await addRelayTransaction({ lenderUserId, recipientUserId, amount, note });
     setRelayPending(false);
     if (res.ok) {
-      setRelayMsg({ tone: "ok", text: "Both entries saved (borrow + lend)." });
       (e.currentTarget as HTMLFormElement).reset();
+      router.refresh();
+      router.push("/contacts");
     } else setRelayMsg({ tone: "err", text: res.error });
   }
 
