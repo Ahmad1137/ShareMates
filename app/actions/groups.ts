@@ -15,6 +15,15 @@ export async function createGroup(formData: FormData) {
   }
 
   const supabase = await createClient();
+
+  const { error: profileError } = await supabase.from("users").upsert(
+    { id: user.id, email: user.email, name: user.name },
+    { onConflict: "id" },
+  );
+  if (profileError) {
+    return { error: profileError.message };
+  }
+
   const { data: group, error } = await supabase
     .from("groups")
     .insert({ name, created_by: user.id })
