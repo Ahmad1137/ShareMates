@@ -18,8 +18,10 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import {
+  HandCoins,
   LayoutDashboard,
   LogOut,
+  NotebookPen,
   Sparkles,
   UserCircle,
   UsersRound,
@@ -30,6 +32,8 @@ import { usePathname, useRouter } from "next/navigation";
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/groups", label: "Groups", icon: UsersRound },
+  { href: "/contacts", label: "IOU", icon: HandCoins },
+  { href: "/ledger", label: "Ledger", icon: NotebookPen },
   { href: "/profile", label: "Profile", icon: UserCircle },
 ];
 
@@ -76,6 +80,8 @@ export function AppSidebar({ user }: { user: AppUser }) {
                 const active =
                   pathname === href ||
                   (href === "/groups" && pathname.startsWith("/group")) ||
+                  (href === "/contacts" && pathname.startsWith("/contacts")) ||
+                  (href === "/ledger" && pathname.startsWith("/ledger")) ||
                   (href !== "/dashboard" &&
                     href !== "/profile" &&
                     pathname.startsWith(href));

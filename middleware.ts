@@ -13,6 +13,8 @@ export const config = {
     "/dashboard/:path*",
     "/groups/:path*",
     "/group/:path*",
+    "/contacts/:path*",
+    "/ledger/:path*",
     "/profile/:path*",
     "/invite/:path*",
     "/auth/callback",

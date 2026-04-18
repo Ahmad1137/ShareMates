@@ -9,11 +9,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { getDebtDashboardTotals } from "@/app/actions/debt";
 import { requireUser } from "@/lib/auth";
 import { fetchRecentExpensesForGroups } from "@/lib/expense-queries";
 import { formatExpenseDay } from "@/lib/format-expense-date";
 import { createClient } from "@/lib/supabase/server";
-import { ArrowRight, Receipt, Sparkles, TrendingUp, Users } from "lucide-react";
+import { ArrowRight, HandCoins, Receipt, Sparkles, TrendingUp, Users } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -24,6 +25,7 @@ export const metadata: Metadata = {
 export default async function DashboardPage() {
   const user = await requireUser();
   const supabase = await createClient();
+  const debtTotals = await getDebtDashboardTotals();
 
   const { data: memberRows } = await supabase
     .from("members")
@@ -177,6 +179,42 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Personal IOU */}
+      <Card className="border-border/60 bg-card/70 shadow-card backdrop-blur animate-fade-up [animation-delay:120ms]">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+          <div className="flex items-center gap-2">
+            <span className="flex size-9 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-glow">
+              <HandCoins className="size-4" />
+            </span>
+            <div>
+              <CardTitle className="text-base">Personal IOU</CardTitle>
+              <CardDescription>Totals from contacts linked to registered users.</CardDescription>
+            </div>
+          </div>
+          <Link
+            href="/contacts"
+            className="flex items-center gap-1 text-sm font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+          >
+            Open contacts
+            <ArrowRight className="size-3.5" />
+          </Link>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <div className="rounded-xl border border-border/50 bg-background/50 p-4">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">You owe</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-amber-700 dark:text-amber-400">
+              ${debtTotals.totalYouOwe.toFixed(2)}
+            </p>
+          </div>
+          <div className="rounded-xl border border-border/50 bg-background/50 p-4">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">You&apos;ll receive</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+              ${debtTotals.totalOwedToYou.toFixed(2)}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Groups chips */}
       <Card className="border-border/60 bg-card/70 shadow-card backdrop-blur animate-fade-up [animation-delay:160ms]">
