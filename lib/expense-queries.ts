@@ -1,53 +1,89 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-function isMissingCreatedAtColumn(message: string): boolean {
+function isMissingColumn(message: string, col: string): boolean {
   return (
-    message.includes("created_at") &&
+    message.includes(col) &&
     (message.includes("does not exist") || message.includes("schema cache"))
   );
 }
 
-/** Group detail: list expenses for one group, newest first when created_at exists. */
+/** Group detail: list expenses for one group, newest by spent_on then created_at. */
 export async function fetchExpensesForGroup(
   supabase: SupabaseClient,
   groupId: string,
 ) {
-  const primary = await supabase
+  const full = await supabase
     .from("expenses")
-    .select("id, amount, description, created_at, paid_by")
+    .select("id, amount, description, spent_on, created_at, paid_by")
     .eq("group_id", groupId)
+    .order("spent_on", { ascending: false })
     .order("created_at", { ascending: false });
 
-  if (!primary.error) {
+  if (!full.error) {
     return {
-      data: primary.data ?? [],
+      data: full.data ?? [],
       error: null as null,
     };
   }
 
-  if (!isMissingCreatedAtColumn(primary.error.message ?? "")) {
-    return { data: [], error: primary.error };
+  if (isMissingColumn(full.error.message ?? "", "spent_on")) {
+    const noSpent = await supabase
+      .from("expenses")
+      .select("id, amount, description, created_at, paid_by")
+      .eq("group_id", groupId)
+      .order("created_at", { ascending: false });
+
+    if (!noSpent.error) {
+      const rows = (noSpent.data ?? []).map((r) => ({
+        ...r,
+        spent_on: null as string | null,
+      }));
+      return { data: rows, error: null as null };
+    }
+
+    if (isMissingColumn(noSpent.error.message ?? "", "created_at")) {
+      const minimal = await supabase
+        .from("expenses")
+        .select("id, amount, description, paid_by")
+        .eq("group_id", groupId)
+        .order("id", { ascending: false });
+
+      if (minimal.error) {
+        return { data: [], error: minimal.error };
+      }
+      const rows = (minimal.data ?? []).map((r) => ({
+        ...r,
+        spent_on: null as string | null,
+        created_at: null as string | null,
+      }));
+      return { data: rows, error: null as null };
+    }
+
+    return { data: [], error: noSpent.error };
   }
 
-  const fallback = await supabase
-    .from("expenses")
-    .select("id, amount, description, paid_by")
-    .eq("group_id", groupId)
-    .order("id", { ascending: false });
+  if (isMissingColumn(full.error.message ?? "", "created_at")) {
+    const partial = await supabase
+      .from("expenses")
+      .select("id, amount, description, spent_on, paid_by")
+      .eq("group_id", groupId)
+      .order("spent_on", { ascending: false })
+      .order("id", { ascending: false });
 
-  if (fallback.error) {
-    return { data: [], error: fallback.error };
+    if (partial.error) {
+      return { data: [], error: partial.error };
+    }
+    const rows = (partial.data ?? []).map((r) => ({
+      ...r,
+      created_at: null as string | null,
+    }));
+    return { data: rows, error: null as null };
   }
 
-  const rows = (fallback.data ?? []).map((r) => ({
-    ...r,
-    created_at: null as string | null,
-  }));
-
-  return { data: rows, error: null as null };
+  return { data: [], error: full.error };
 }
 
-/** Dashboard: recent expenses across groups (limit), ordered by date when possible. */
+/** Dashboard: recent expenses across groups (limit). */
 export async function fetchRecentExpensesForGroups(
   supabase: SupabaseClient,
   groupIds: string[],
@@ -57,41 +93,62 @@ export async function fetchRecentExpensesForGroups(
     return { data: [], error: null as null };
   }
 
-  const primary = await supabase
+  const full = await supabase
     .from("expenses")
     .select(
-      "id, amount, description, created_at, group_id, paid_by, groups(name)",
+      "id, amount, description, spent_on, created_at, group_id, paid_by, groups(name)",
     )
     .in("group_id", groupIds)
+    .order("spent_on", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(limit);
 
-  if (!primary.error) {
+  if (!full.error) {
     return {
-      data: primary.data ?? [],
+      data: full.data ?? [],
       error: null as null,
     };
   }
 
-  if (!isMissingCreatedAtColumn(primary.error.message ?? "")) {
-    return { data: [], error: primary.error };
+  if (isMissingColumn(full.error.message ?? "", "spent_on")) {
+    const noSpent = await supabase
+      .from("expenses")
+      .select(
+        "id, amount, description, created_at, group_id, paid_by, groups(name)",
+      )
+      .in("group_id", groupIds)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (!noSpent.error) {
+      const rows = (noSpent.data ?? []).map((r) => ({
+        ...r,
+        spent_on: null as string | null,
+      }));
+      return { data: rows, error: null as null };
+    }
+
+    if (isMissingColumn(noSpent.error.message ?? "", "created_at")) {
+      const minimal = await supabase
+        .from("expenses")
+        .select("id, amount, description, group_id, paid_by, groups(name)")
+        .in("group_id", groupIds)
+        .order("id", { ascending: false })
+        .limit(limit);
+
+      if (minimal.error) {
+        return { data: [], error: minimal.error };
+      }
+      const rows = (minimal.data ?? []).map((r) => ({
+        ...r,
+        spent_on: null as string | null,
+        created_at: null as string | null,
+      }));
+      return { data: rows, error: null as null };
+    }
+
+    return { data: [], error: noSpent.error };
   }
 
-  const fallback = await supabase
-    .from("expenses")
-    .select("id, amount, description, group_id, paid_by, groups(name)")
-    .in("group_id", groupIds)
-    .order("id", { ascending: false })
-    .limit(limit);
-
-  if (fallback.error) {
-    return { data: [], error: fallback.error };
-  }
-
-  const rows = (fallback.data ?? []).map((r) => ({
-    ...r,
-    created_at: null as string | null,
-  }));
-
-  return { data: rows, error: null as null };
+  return { data: [], error: full.error };
 }

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 import { requireUser } from "@/lib/auth";
 import { fetchRecentExpensesForGroups } from "@/lib/expense-queries";
+import { formatExpenseDay } from "@/lib/format-expense-date";
 import { createClient } from "@/lib/supabase/server";
 import { ArrowRight, Receipt, Sparkles, TrendingUp, Users } from "lucide-react";
 import Link from "next/link";
@@ -247,12 +248,15 @@ export default async function DashboardPage() {
               <TableBody>
                 {(expenses ?? []).map((e) => {
                   const g = e.groups as unknown as { name: string } | null;
-                  const when = e.created_at
-                    ? new Date(e.created_at).toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                      })
-                    : "—";
+                  const row = e as {
+                    spent_on?: string | null;
+                    created_at?: string | null;
+                  };
+                  const when = formatExpenseDay(
+                    row.spent_on,
+                    row.created_at ?? null,
+                    true,
+                  );
                   return (
                     <TableRow
                       key={e.id}

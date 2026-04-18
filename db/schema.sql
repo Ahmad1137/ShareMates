@@ -33,10 +33,12 @@ CREATE TABLE expenses (
   paid_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
   amount numeric(14, 2) NOT NULL CHECK (amount > 0),
   description text NOT NULL DEFAULT '',
+  spent_on date NOT NULL DEFAULT CURRENT_DATE,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_expenses_group_id ON expenses (group_id);
+CREATE INDEX idx_expenses_spent_on ON expenses (spent_on);
 CREATE INDEX idx_expenses_paid_by ON expenses (paid_by);
 
 CREATE TABLE splits (

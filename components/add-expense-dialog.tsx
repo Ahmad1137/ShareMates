@@ -12,9 +12,17 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DollarSign, Receipt } from "lucide-react";
+import { Calendar, DollarSign, Receipt } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+
+function isoTodayLocal() {
+  const t = new Date();
+  const y = t.getFullYear();
+  const m = String(t.getMonth() + 1).padStart(2, "0");
+  const d = String(t.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 export function AddExpenseDialog({
   groupId,
@@ -24,10 +32,18 @@ export function AddExpenseDialog({
   memberCount: number;
 }) {
   const [open, setOpen] = useState(false);
+  const [spentOn, setSpentOn] = useState(() => isoTodayLocal());
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [isRefreshing, startTransition] = useTransition();
   const router = useRouter();
+
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (next) {
+      setSpentOn(isoTodayLocal());
+    }
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -44,6 +60,7 @@ export function AddExpenseDialog({
         groupId,
         amount,
         description,
+        spentOn,
       });
 
       if ("error" in res && res.error) {
@@ -76,7 +93,7 @@ export function AddExpenseDialog({
         <Receipt className="size-4" />
         Add expense
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <div className="flex size-11 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-glow">
@@ -92,6 +109,20 @@ export function AddExpenseDialog({
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={onSubmit} className="grid gap-5">
+            <div className="grid gap-2">
+              <Label htmlFor="expense-date">Date</Label>
+              <div className="relative">
+                <Calendar className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="expense-date"
+                  type="date"
+                  value={spentOn}
+                  onChange={(e) => setSpentOn(e.target.value)}
+                  required
+                  className="h-11 pl-9"
+                />
+              </div>
+            </div>
             <div className="grid gap-2">
               <Label htmlFor="expense-amount">Amount</Label>
               <div className="relative">

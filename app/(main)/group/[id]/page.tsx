@@ -14,6 +14,7 @@ import {
 import { computeGroupBalances } from "@/lib/balances";
 import { requireUser } from "@/lib/auth";
 import { fetchExpensesForGroup } from "@/lib/expense-queries";
+import { formatExpenseDay } from "@/lib/format-expense-date";
 import { createClient } from "@/lib/supabase/server";
 import { Crown, Receipt, Users } from "lucide-react";
 import { connection } from "next/server";
@@ -334,13 +335,11 @@ export default async function GroupDetailPage({ params }: PageProps) {
               </TableHeader>
               <TableBody>
                 {(expenseRows ?? []).map((e) => {
-                  const when = e.created_at
-                    ? new Date(e.created_at).toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })
-                    : "—";
+                  const row = e as {
+                    spent_on?: string | null;
+                    created_at?: string | null;
+                  };
+                  const when = formatExpenseDay(row.spent_on, row.created_at ?? null);
                   const splitsFor = splitRows.filter(
                     (s) => s.expense_id === e.id,
                   );

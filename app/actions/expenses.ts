@@ -5,16 +5,34 @@ import { equalSplitAmounts } from "@/lib/splits/equal-split";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
+function normalizeSpentOn(raw: string | undefined): string {
+  const s = (raw ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    if (
+      dt.getFullYear() === y &&
+      dt.getMonth() === m - 1 &&
+      dt.getDate() === d
+    ) {
+      return s;
+    }
+  }
+  return new Date().toISOString().slice(0, 10);
+}
+
 export async function createExpenseWithEqualSplits(input: {
   groupId: string;
   amount: number;
   description: string;
+  spentOn?: string;
 }) {
   const user = await requireUser();
   const supabase = await createClient();
 
   const description = input.description.trim() || "Expense";
   const amount = Number(input.amount);
+  const spentOn = normalizeSpentOn(input.spentOn);
   if (!Number.isFinite(amount) || amount <= 0) {
     return { error: "Enter a valid amount greater than zero." };
   }
@@ -47,6 +65,7 @@ export async function createExpenseWithEqualSplits(input: {
       paid_by: user.id,
       amount,
       description,
+      spent_on: spentOn,
     })
     .select("id")
     .single();
