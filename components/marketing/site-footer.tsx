@@ -7,9 +7,11 @@ export function SiteFooter() {
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 md:grid-cols-2 md:px-6 lg:grid-cols-4">
         <div className="lg:col-span-2">
           <Link href="/" className="group flex items-center gap-2">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-glow">
-              <Sparkles className="size-4" />
-            </span>
+            <img
+              src="/logo.svg"
+              alt="ShareMates Logo"
+              className="size-8 rounded-lg transition-transform duration-300 group-hover:scale-105"
+            />
             <span className="text-lg font-semibold gradient-text">
               ShareMates
             </span>

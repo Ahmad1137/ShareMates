@@ -43,9 +43,11 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
             href="/"
             className="group flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
-            <span className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 text-white shadow-glow transition-transform duration-300 group-hover:scale-105 group-hover:rotate-3">
-              <Sparkles className="size-4" />
-            </span>
+            <img
+              src="/logo.svg"
+              alt="ShareMates Logo"
+              className="size-8 rounded-lg transition-transform duration-300 group-hover:scale-105"
+            />
             <span className="gradient-text text-base font-semibold">
               ShareMates
             </span>
