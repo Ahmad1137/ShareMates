@@ -14,7 +14,7 @@ import { requireUser } from "@/lib/auth";
 import { fetchRecentExpensesForGroups } from "@/lib/expense-queries";
 import { formatExpenseDay } from "@/lib/format-expense-date";
 import { createClient } from "@/lib/supabase/server";
-import { ArrowRight, HandCoins, Receipt, Sparkles, TrendingUp, Users } from "lucide-react";
+import { ArrowRight, HandCoins, Receipt, TrendingUp, Users } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -87,7 +87,11 @@ export default async function DashboardPage() {
           <div className="relative flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div>
               <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                <Sparkles className="size-3" />
+                <img
+                  src="/logo.svg"
+                  alt=""
+                  className="size-3 rounded-sm"
+                />
                 Welcome back
               </span>
               <h1 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">
