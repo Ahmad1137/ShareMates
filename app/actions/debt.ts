@@ -4,26 +4,239 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth";
 import { formatDebtBalanceLabel } from "@/lib/debt/balance";
-import type { ContactRow, DebtTransactionRow, DebtTransactionType } from "@/lib/debt/types";
+import { sendContactNotificationEmail } from "@/lib/email/send-contact-notification-email";
+import type {
+  ContactRow,
+  DebtTransactionRow,
+  DebtTransactionType,
+} from "@/lib/debt/types";
 
 function parseAmount(raw: string): number {
   const n = Number.parseFloat(raw.replace(",", "."));
-  if (!Number.isFinite(n) || n <= 0) throw new Error("Enter a valid positive amount.");
+  if (!Number.isFinite(n) || n <= 0)
+    throw new Error("Enter a valid positive amount.");
   return Math.round(n * 100) / 100;
 }
 
-export async function addContact(formData: FormData): Promise<{ ok: true } | { ok: false; error: string }> {
+type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
+
+/** Resolve a contact row by `contacts.id` or by linked `contact_user_id`. */
+async function resolveContactRow(
+  contactInput: string,
+  ownerId: string,
+  supabase: SupabaseServer,
+): Promise<{ id: string; contact_user_id: string | null; name: string } | null> {
+  const byId = await supabase
+    .from("contacts")
+    .select("id, contact_user_id, name")
+    .eq("user_id", ownerId)
+    .eq("id", contactInput)
+    .maybeSingle();
+  if (byId.error) throw new Error(byId.error.message);
+  if (byId.data) return byId.data;
+
+  const byLinkedUser = await supabase
+    .from("contacts")
+    .select("id, contact_user_id, name")
+    .eq("user_id", ownerId)
+    .eq("contact_user_id", contactInput)
+    .maybeSingle();
+  if (byLinkedUser.error) throw new Error(byLinkedUser.error.message);
+  return byLinkedUser.data ?? null;
+}
+
+const TX_SEL_FULL =
+  "id, sender_id, receiver_id, contact_id, amount, type, note, created_at";
+const TX_SEL_LEGACY = "id, sender_id, receiver_id, amount, type, note, created_at";
+
+function isMissingContactLedgerRpc(
+  message: string,
+  code?: string,
+): boolean {
+  return (
+    /could not find the function/i.test(message) ||
+    /schema cache/i.test(message) ||
+    code === "PGRST202" ||
+    code === "42883"
+  );
+}
+
+function isMissingContactIdColumn(message: string, code?: string): boolean {
+  return (
+    code === "42703" ||
+    (/contact_id/i.test(message) &&
+      /does not exist|column/i.test(message))
+  );
+}
+
+/** PostgREST: column missing or schema cache not reloaded after migration. */
+function isPostgrestMissingContactIdColumn(error: {
+  message?: string | null;
+  code?: string | null;
+}): boolean {
+  const m = error.message ?? "";
+  const c = error.code ?? "";
+  return (
+    isMissingContactIdColumn(m, c) ||
+    (/contact_id/i.test(m) && /schema cache/i.test(m))
+  );
+}
+
+const OFFLINE_IOU_DB_HINT =
+  "Offline IOU needs database migration 013. In Supabase → SQL Editor, run the file db/013_debt_contact_scoped_transactions.sql from this repo, then run: NOTIFY pgrst, 'reload schema';";
+
+/** Same sign convention as `get_contact_ledger_balance` in SQL. */
+function computeContactLedgerBalanceFromTransactions(
+  ownerId: string,
+  contactRowId: string,
+  cpUser: string | null,
+  transactions: DebtTransactionRow[],
+): number {
+  let balance = 0;
+  for (const t of transactions) {
+    const amt = Number(t.amount);
+    if (!Number.isFinite(amt)) continue;
+    const cid = t.contact_id ?? null;
+
+    const lendMatch =
+      t.type === "lend" &&
+      t.sender_id === ownerId &&
+      (cid === contactRowId ||
+        (cid == null &&
+          cpUser != null &&
+          t.receiver_id != null &&
+          t.receiver_id === cpUser));
+    if (lendMatch) balance += amt;
+
+    const borrowMatch =
+      t.type === "borrow" &&
+      t.receiver_id === ownerId &&
+      (cid === contactRowId ||
+        (cid == null &&
+          cpUser != null &&
+          t.sender_id != null &&
+          t.sender_id === cpUser));
+    if (borrowMatch) balance -= amt;
+
+    const settleTheyPaid =
+      t.type === "settle" &&
+      t.receiver_id === ownerId &&
+      (cid === contactRowId ||
+        (cid == null &&
+          cpUser != null &&
+          t.sender_id != null &&
+          t.sender_id === cpUser));
+    if (settleTheyPaid) balance -= amt;
+
+    const settleYouPaid =
+      t.type === "settle" &&
+      t.sender_id === ownerId &&
+      (cid === contactRowId ||
+        (cid == null &&
+          cpUser != null &&
+          t.receiver_id != null &&
+          t.receiver_id === cpUser));
+    if (settleYouPaid) balance += amt;
+  }
+  return Math.round(balance * 100) / 100;
+}
+
+async function fetchMergedTransactions(
+  ownerId: string,
+  contactRow: ContactRow,
+  supabase: SupabaseServer,
+): Promise<DebtTransactionRow[]> {
+  let scopedRows: DebtTransactionRow[] = [];
+  const { data: scoped, error: scopedErr } = await supabase
+    .from("transactions")
+    .select(TX_SEL_FULL)
+    .eq("contact_id", contactRow.id)
+    .order("created_at", { ascending: false });
+
+  if (!scopedErr) {
+    scopedRows = (scoped ?? []) as DebtTransactionRow[];
+  } else if (
+    isMissingContactIdColumn(scopedErr.message ?? "", scopedErr.code)
+  ) {
+    scopedRows = [];
+  } else {
+    throw new Error(scopedErr.message);
+  }
+
+  let legacy: DebtTransactionRow[] = [];
+  if (contactRow.contact_user_id) {
+    const u = contactRow.contact_user_id;
+    const legacyWithContactCol = await supabase
+      .from("transactions")
+      .select(TX_SEL_FULL)
+      .is("contact_id", null)
+      .or(
+        `and(sender_id.eq.${ownerId},receiver_id.eq.${u}),and(sender_id.eq.${u},receiver_id.eq.${ownerId})`,
+      )
+      .order("created_at", { ascending: false });
+
+    if (!legacyWithContactCol.error) {
+      legacy = (legacyWithContactCol.data ?? []).map((t) => ({
+        ...(t as DebtTransactionRow),
+        contact_id: (t as DebtTransactionRow).contact_id ?? null,
+      }));
+    } else if (
+      isMissingContactIdColumn(
+        legacyWithContactCol.error.message ?? "",
+        legacyWithContactCol.error.code,
+      )
+    ) {
+      const legacyNoContactCol = await supabase
+        .from("transactions")
+        .select(TX_SEL_LEGACY)
+        .or(
+          `and(sender_id.eq.${ownerId},receiver_id.eq.${u}),and(sender_id.eq.${u},receiver_id.eq.${ownerId})`,
+        )
+        .order("created_at", { ascending: false });
+      if (legacyNoContactCol.error)
+        throw new Error(legacyNoContactCol.error.message);
+      legacy = (legacyNoContactCol.data ?? []).map((t) => ({
+        ...(t as DebtTransactionRow),
+        contact_id: null,
+      }));
+    } else {
+      throw new Error(legacyWithContactCol.error.message);
+    }
+  }
+
+  const byId = new Map<string, DebtTransactionRow>();
+  for (const t of legacy) byId.set(t.id, t);
+  for (const t of scopedRows) byId.set(t.id, t);
+  return [...byId.values()].sort(
+    (a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+}
+
+export async function addContact(
+  formData: FormData,
+): Promise<
+  | { ok: true; emailSent?: boolean; emailReason?: string }
+  | { ok: false; error: string }
+> {
   const user = await requireUser();
   const name = String(formData.get("name") ?? "").trim();
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const email = String(formData.get("email") ?? "")
+    .trim()
+    .toLowerCase();
   if (!name) return { ok: false, error: "Name is required." };
 
   const supabase = await createClient();
   let contactUserId: string | null = null;
   if (email) {
-    const { data: other } = await supabase.from("users").select("id").eq("email", email).maybeSingle();
+    const { data: other } = await supabase
+      .from("users")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
     if (other?.id) {
-      if (other.id === user.id) return { ok: false, error: "You cannot add yourself as a contact." };
+      if (other.id === user.id)
+        return { ok: false, error: "You cannot add yourself as a contact." };
       contactUserId = other.id;
     }
   }
@@ -36,14 +249,27 @@ export async function addContact(formData: FormData): Promise<{ ok: true } | { o
   });
   if (error) return { ok: false, error: error.message };
 
+  let emailSent = undefined;
+  let emailReason = undefined;
+  if (email) {
+    const emailResult = await sendContactNotificationEmail({
+      to: email,
+      contactName: name,
+      adderName: user.name || user.email || "Someone",
+    });
+    emailSent = emailResult.sent;
+    emailReason = emailResult.reason;
+  }
+
   revalidatePath("/contacts");
   revalidatePath("/dashboard");
   revalidatePath("/ledger");
-  return { ok: true };
+  return { ok: true, emailSent, emailReason };
 }
 
 export type AddTransactionInput = {
-  contactUserId: string;
+  /** `contacts.id` (preferred) or linked user's id (resolved to a row). */
+  contactId: string;
   amount: string;
   /** UI: what you did with this person */
   flow: "i_gave" | "i_received" | "settled";
@@ -58,42 +284,65 @@ export async function addTransaction(
   const user = await requireUser();
   const amount = parseAmount(input.amount);
   const note = (input.note ?? "").trim();
-  const otherId = input.contactUserId;
-  if (!otherId || otherId === user.id) return { ok: false, error: "Pick a registered contact for the ledger." };
+  const raw = input.contactId.trim();
+  if (!raw) return { ok: false, error: "Pick a contact for the ledger." };
+
+  const supabase = await createClient();
+  const row = await resolveContactRow(raw, user.id, supabase);
+  if (!row) return { ok: false, error: "Contact not found." };
+
+  const contact_id = row.id;
+  const cpUser = row.contact_user_id;
 
   let type: DebtTransactionType;
-  let sender_id: string;
-  let receiver_id: string;
+  let sender_id: string | null;
+  let receiver_id: string | null;
 
   if (input.flow === "i_gave") {
     type = "lend";
     sender_id = user.id;
-    receiver_id = otherId;
+    receiver_id = cpUser;
   } else if (input.flow === "i_received") {
     type = "borrow";
-    sender_id = otherId;
+    sender_id = cpUser;
     receiver_id = user.id;
   } else {
     type = "settle";
     if (input.settleDirection === "i_paid_them") {
       sender_id = user.id;
-      receiver_id = otherId;
+      receiver_id = cpUser;
     } else if (input.settleDirection === "they_paid_me") {
-      sender_id = otherId;
+      sender_id = cpUser;
       receiver_id = user.id;
     } else {
       return { ok: false, error: "Choose who made the settlement payment." };
     }
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase.from("transactions").insert({
+  const modernRow = {
     sender_id,
     receiver_id,
+    contact_id,
     amount,
     type,
     note,
-  });
+  };
+  let { error } = await supabase.from("transactions").insert(modernRow);
+
+  if (error && isPostgrestMissingContactIdColumn(error)) {
+    if (!cpUser || sender_id == null || receiver_id == null) {
+      return { ok: false, error: OFFLINE_IOU_DB_HINT };
+    }
+    const legacyRow = {
+      sender_id,
+      receiver_id,
+      amount,
+      type,
+      note,
+    };
+    ({ error } = await supabase.from("transactions").insert(legacyRow));
+  }
+
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/contacts");
@@ -103,8 +352,8 @@ export async function addTransaction(
 }
 
 export type RelayTransactionInput = {
-  lenderUserId: string;
-  recipientUserId: string;
+  lenderContactId: string;
+  recipientContactId: string;
   amount: string;
   note?: string;
 };
@@ -116,19 +365,68 @@ export async function addRelayTransaction(
   const user = await requireUser();
   const amount = parseAmount(input.amount);
   const note = (input.note ?? "").trim();
-  const { lenderUserId, recipientUserId } = input;
-  if (!lenderUserId || !recipientUserId) return { ok: false, error: "Select both people." };
-  if (lenderUserId === user.id || recipientUserId === user.id) {
-    return { ok: false, error: "Lender and recipient must be other registered users." };
-  }
-  if (lenderUserId === recipientUserId) return { ok: false, error: "Lender and recipient must be different." };
+  const { lenderContactId, recipientContactId } = input;
+  if (!lenderContactId || !recipientContactId)
+    return { ok: false, error: "Select both people." };
+  if (lenderContactId === recipientContactId)
+    return { ok: false, error: "Lender and recipient must be different." };
 
   const supabase = await createClient();
-  const rows = [
-    { sender_id: lenderUserId, receiver_id: user.id, amount, type: "borrow" as const, note },
-    { sender_id: user.id, receiver_id: recipientUserId, amount, type: "lend" as const, note },
+
+  const lenderRow = await resolveContactRow(lenderContactId, user.id, supabase);
+  if (!lenderRow)
+    return { ok: false, error: "Borrow-from contact not found." };
+  const recipientRow = await resolveContactRow(
+    recipientContactId,
+    user.id,
+    supabase,
+  );
+  if (!recipientRow)
+    return { ok: false, error: "Lend-to contact not found." };
+
+  const modernRows = [
+    {
+      sender_id: lenderRow.contact_user_id,
+      receiver_id: user.id,
+      contact_id: lenderRow.id,
+      amount,
+      type: "borrow" as const,
+      note,
+    },
+    {
+      sender_id: user.id,
+      receiver_id: recipientRow.contact_user_id,
+      contact_id: recipientRow.id,
+      amount,
+      type: "lend" as const,
+      note,
+    },
   ];
-  const { error } = await supabase.from("transactions").insert(rows);
+  let { error } = await supabase.from("transactions").insert(modernRows);
+
+  if (error && isPostgrestMissingContactIdColumn(error)) {
+    if (!lenderRow.contact_user_id || !recipientRow.contact_user_id) {
+      return { ok: false, error: OFFLINE_IOU_DB_HINT };
+    }
+    const legacyRows = [
+      {
+        sender_id: lenderRow.contact_user_id,
+        receiver_id: user.id,
+        amount,
+        type: "borrow" as const,
+        note,
+      },
+      {
+        sender_id: user.id,
+        receiver_id: recipientRow.contact_user_id,
+        amount,
+        type: "lend" as const,
+        note,
+      },
+    ];
+    ({ error } = await supabase.from("transactions").insert(legacyRows));
+  }
+
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/contacts");
@@ -137,47 +435,73 @@ export async function addRelayTransaction(
   return { ok: true };
 }
 
-export async function getTransactionsForContactRow(contactRowId: string): Promise<{
+export async function getTransactionsForContactRow(
+  contactRowId: string,
+): Promise<{
   contact: ContactRow;
   transactions: DebtTransactionRow[];
 } | null> {
   const contact = await getMyContactRow(contactRowId);
   if (!contact) return null;
-  if (!contact.contact_user_id) return { contact, transactions: [] };
-  const transactions = await getTransactionsByContact(contact.contact_user_id);
+  const supabase = await createClient();
+  const transactions = await fetchMergedTransactions(
+    contact.user_id,
+    contact,
+    supabase,
+  );
   return { contact, transactions };
 }
 
-export async function getTransactionsByContact(contactUserId: string): Promise<DebtTransactionRow[]> {
-  const user = await requireUser();
-  if (!contactUserId || contactUserId === user.id) return [];
-
+/**
+ * Balance for a contact row (registered or offline).
+ * Prefers RPC `get_contact_ledger_balance` (db/013). If PostgREST has not picked it up yet
+ * or migration was not run, falls back to the same math in TypeScript / legacy `get_debt_balance`.
+ */
+export async function getContactLedgerBalance(
+  ownerId: string,
+  contactRowId: string,
+): Promise<number> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("transactions")
-    .select("id, sender_id, receiver_id, amount, type, note, created_at")
-    .or(
-      `and(sender_id.eq.${user.id},receiver_id.eq.${contactUserId}),and(sender_id.eq.${contactUserId},receiver_id.eq.${user.id})`,
-    )
-    .order("created_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  return (data ?? []) as DebtTransactionRow[];
-}
-
-export async function getBalance(me: string, contactUserId: string): Promise<number> {
-  if (!contactUserId || contactUserId === me) return 0;
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("get_debt_balance", {
-    p_me: me,
-    p_counterparty: contactUserId,
+  const { data, error } = await supabase.rpc("get_contact_ledger_balance", {
+    p_owner: ownerId,
+    p_contact: contactRowId,
   });
-  if (error) throw new Error(error.message);
-  return Number(data ?? 0);
+  if (!error) return Number(data ?? 0);
+
+  const msg = error.message ?? "";
+  if (!isMissingContactLedgerRpc(msg, error.code)) {
+    throw new Error(msg);
+  }
+
+  const contact = await getMyContactRow(contactRowId);
+  if (!contact || contact.user_id !== ownerId) return 0;
+
+  try {
+    const txs = await fetchMergedTransactions(
+      ownerId,
+      contact,
+      supabase,
+    );
+    return computeContactLedgerBalanceFromTransactions(
+      ownerId,
+      contact.id,
+      contact.contact_user_id,
+      txs,
+    );
+  } catch {
+    if (contact.contact_user_id) {
+      const r = await supabase.rpc("get_debt_balance", {
+        p_me: ownerId,
+        p_counterparty: contact.contact_user_id,
+      });
+      if (!r.error) return Number(r.data ?? 0);
+    }
+    return 0;
+  }
 }
 
 export async function listContactsWithBalances(): Promise<
-  (ContactRow & { balance: number | null; balanceLabel: string })[]
+  (ContactRow & { balance: number; balanceLabel: string })[]
 > {
   const user = await requireUser();
   const supabase = await createClient();
@@ -190,20 +514,63 @@ export async function listContactsWithBalances(): Promise<
   if (error) throw new Error(error.message);
 
   const rows = (contacts ?? []) as ContactRow[];
+  const out: (ContactRow & { balance: number; balanceLabel: string })[] = [];
 
-  const out: (ContactRow & { balance: number | null; balanceLabel: string })[] = [];
-  for (const c of rows) {
-    if (!c.contact_user_id) {
-      out.push({ ...c, balance: null, balanceLabel: "Link email to a user to track balance" });
-      continue;
-    }
-    const bal = await getBalance(user.id, c.contact_user_id);
-    out.push({ ...c, balance: bal, balanceLabel: formatDebtBalanceLabel(bal) });
+  const unlinkedEmails = rows
+    .filter((c) => !c.contact_user_id && c.email)
+    .map((c) => c.email);
+
+  const uniqueEmails = Array.from(new Set(unlinkedEmails));
+  const emailToUserId = new Map<string, string>();
+
+  if (uniqueEmails.length > 0) {
+    const { data: matchedUsers, error: matchError } = await supabase
+      .from("users")
+      .select("id, email")
+      .in("email", uniqueEmails);
+
+    if (matchError) throw new Error(matchError.message);
+
+    (matchedUsers ?? []).forEach((u: { id: string; email: string }) => {
+      if (u.email) emailToUserId.set(u.email, u.id);
+    });
   }
+
+  for (const c of rows) {
+    let contactUserId = c.contact_user_id;
+    if (!contactUserId && c.email) {
+      const matchedId = emailToUserId.get(c.email);
+      if (matchedId && matchedId !== user.id) {
+        contactUserId = matchedId;
+        const { error: updateError } = await supabase
+          .from("contacts")
+          .update({ contact_user_id: matchedId })
+          .eq("id", c.id);
+        if (updateError) {
+          console.warn(
+            "Failed to auto-link contact",
+            c.id,
+            updateError.message,
+          );
+        }
+      }
+    }
+
+    const bal = await getContactLedgerBalance(user.id, c.id);
+    out.push({
+      ...c,
+      contact_user_id: contactUserId,
+      balance: bal,
+      balanceLabel: formatDebtBalanceLabel(bal),
+    });
+  }
+
   return out;
 }
 
-export async function getMyContactRow(contactRowId: string): Promise<ContactRow | null> {
+export async function getMyContactRow(
+  contactRowId: string,
+): Promise<ContactRow | null> {
   const user = await requireUser();
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -216,13 +583,15 @@ export async function getMyContactRow(contactRowId: string): Promise<ContactRow 
   return (data as ContactRow | null) ?? null;
 }
 
-export async function getDebtDashboardTotals(): Promise<{ totalYouOwe: number; totalOwedToYou: number }> {
+export async function getDebtDashboardTotals(): Promise<{
+  totalYouOwe: number;
+  totalOwedToYou: number;
+}> {
   const user = await requireUser();
   const contacts = await listContactsWithBalances();
   let totalYouOwe = 0;
   let totalOwedToYou = 0;
   for (const c of contacts) {
-    if (c.balance == null) continue;
     if (c.balance > 0) totalOwedToYou += c.balance;
     else if (c.balance < 0) totalYouOwe += Math.abs(c.balance);
   }

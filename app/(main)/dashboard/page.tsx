@@ -1,6 +1,12 @@
 import { CreateGroupDialog } from "@/components/create-group-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -14,7 +20,13 @@ import { requireUser } from "@/lib/auth";
 import { fetchRecentExpensesForGroups } from "@/lib/expense-queries";
 import { formatExpenseDay } from "@/lib/format-expense-date";
 import { createClient } from "@/lib/supabase/server";
-import { ArrowRight, HandCoins, Receipt, TrendingUp, Users } from "lucide-react";
+import {
+  ArrowRight,
+  HandCoins,
+  Receipt,
+  TrendingUp,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -45,7 +57,10 @@ export default async function DashboardPage() {
 
   const { data: memberCounts } =
     groupIds.length > 0
-      ? await supabase.from("members").select("group_id").in("group_id", groupIds)
+      ? await supabase
+          .from("members")
+          .select("group_id")
+          .in("group_id", groupIds)
       : { data: [] as { group_id: string }[] };
 
   const countByGroup = new Map<string, number>();
@@ -58,9 +73,7 @@ export default async function DashboardPage() {
       ? await fetchRecentExpensesForGroups(supabase, groupIds, 12)
       : { data: [] };
 
-  const payerIds = [
-    ...new Set((expenses ?? []).map((e) => e.paid_by)),
-  ];
+  const payerIds = [...new Set((expenses ?? []).map((e) => e.paid_by))];
   const { data: payers } =
     payerIds.length > 0
       ? await supabase.from("users").select("id, name").in("id", payerIds)
@@ -87,11 +100,7 @@ export default async function DashboardPage() {
           <div className="relative flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div>
               <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                <img
-                  src="/logo.svg"
-                  alt=""
-                  className="size-3 rounded-sm"
-                />
+                <img src="/logo.svg" alt="" className="size-3 rounded-sm" />
                 Welcome back
               </span>
               <h1 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">
@@ -193,7 +202,9 @@ export default async function DashboardPage() {
             </span>
             <div>
               <CardTitle className="text-base">Personal IOU</CardTitle>
-              <CardDescription>Totals from contacts linked to registered users.</CardDescription>
+              <CardDescription>
+                Totals across all IOU contacts, including offline (name-only) entries.
+              </CardDescription>
             </div>
           </div>
           <Link
@@ -206,13 +217,17 @@ export default async function DashboardPage() {
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="rounded-xl border border-border/50 bg-background/50 p-4">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">You owe</p>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">
+              You owe
+            </p>
             <p className="mt-1 text-2xl font-bold tabular-nums text-amber-700 dark:text-amber-400">
               ${debtTotals.totalYouOwe.toFixed(2)}
             </p>
           </div>
           <div className="rounded-xl border border-border/50 bg-background/50 p-4">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">You&apos;ll receive</p>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">
+              You&apos;ll receive
+            </p>
             <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
               ${debtTotals.totalOwedToYou.toFixed(2)}
             </p>
@@ -262,9 +277,7 @@ export default async function DashboardPage() {
       <Card className="border-border/60 bg-card/70 shadow-card backdrop-blur animate-fade-up [animation-delay:240ms]">
         <CardHeader>
           <CardTitle>Recent expenses</CardTitle>
-          <CardDescription>
-            Latest activity across your groups.
-          </CardDescription>
+          <CardDescription>Latest activity across your groups.</CardDescription>
         </CardHeader>
         <CardContent className="px-0 sm:px-6">
           {(expenses ?? []).length === 0 ? (

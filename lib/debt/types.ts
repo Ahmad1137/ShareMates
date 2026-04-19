@@ -11,8 +11,9 @@ export type ContactRow = {
 
 export type DebtTransactionRow = {
   id: string;
-  sender_id: string;
-  receiver_id: string;
+  sender_id: string | null;
+  receiver_id: string | null;
+  contact_id: string | null;
   amount: string;
   type: DebtTransactionType;
   note: string;
@@ -20,6 +21,6 @@ export type DebtTransactionRow = {
 };
 
 export type ContactWithBalance = ContactRow & {
-  balance: number | null;
+  balance: number;
   balanceLabel: string;
 };

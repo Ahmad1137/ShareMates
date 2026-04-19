@@ -45,7 +45,9 @@ export default async function ContactsPage() {
             </span>
             <div>
               <CardTitle className="text-base">Your list</CardTitle>
-              <CardDescription>Balance appears when the email matches a registered user.</CardDescription>
+              <CardDescription>
+                Balances include offline contacts (name-only) and linked accounts.
+              </CardDescription>
             </div>
           </div>
         </CardHeader>
@@ -68,9 +70,9 @@ export default async function ContactsPage() {
                     </div>
                     <p
                       className={`text-sm tabular-nums ${
-                        c.balance != null && c.balance > 0
+                        c.balance > 0
                           ? "text-emerald-700 dark:text-emerald-400"
-                          : c.balance != null && c.balance < 0
+                          : c.balance < 0
                             ? "text-amber-700 dark:text-amber-400"
                             : "text-muted-foreground"
                       }`}

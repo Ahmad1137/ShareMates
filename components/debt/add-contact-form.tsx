@@ -9,20 +9,31 @@ import { Label } from "@/components/ui/label";
 
 export function AddContactForm() {
   const router = useRouter();
-  const [msg, setMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  const [msg, setMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(
+    null,
+  );
   const [pending, setPending] = useState(false);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setMsg(null);
-    const fd = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const fd = new FormData(form);
     setPending(true);
     const res = await addContact(fd);
     setPending(false);
     if (res.ok) {
+      form.reset();
       router.refresh();
-      router.replace("/contacts");
-    } else setMsg({ tone: "err", text: res.error });
+      const successText = res.emailSent
+        ? "Contact saved. Notification email sent."
+        : res.emailSent === false
+          ? `Contact saved. Email could not be sent: ${res.emailReason}`
+          : "Contact saved.";
+      setMsg({ tone: "ok", text: successText });
+    } else {
+      setMsg({ tone: "err", text: res.error });
+    }
   }
 
   return (
@@ -33,14 +44,23 @@ export function AddContactForm() {
       </div>
       <div className="space-y-2">
         <Label htmlFor="email">Email (optional)</Label>
-        <Input id="email" name="email" type="email" autoComplete="email" placeholder="friend@example.com" />
+        <Input
+          id="email"
+          name="email"
+          type="text"
+          inputMode="email"
+          autoComplete="email"
+          placeholder="friend@example.com (optional)"
+        />
         <p className="text-xs text-muted-foreground">
-          If this email matches a ShareMates user, balances and the ledger work for them. Otherwise the contact is
-          stored for your reference only.
+          Optional: if it matches someone on ShareMates, they link automatically. You can
+          still track IOU with them offline without email.
         </p>
       </div>
       {msg ? (
-        <p className={`text-sm ${msg.tone === "ok" ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}`}>
+        <p
+          className={`text-sm ${msg.tone === "ok" ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}`}
+        >
           {msg.text}
         </p>
       ) : null}

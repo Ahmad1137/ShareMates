@@ -1,4 +1,4 @@
-import { getBalance, getTransactionsForContactRow } from "@/app/actions/debt";
+import { getContactLedgerBalance, getTransactionsForContactRow } from "@/app/actions/debt";
 import { describeDebtTransactionForViewer } from "@/lib/debt/describe-transaction";
 import { formatDebtBalanceLabel } from "@/lib/debt/balance";
 import { buttonVariants } from "@/components/ui/button";
@@ -27,15 +27,13 @@ export default async function ContactDetailPage({ params }: Props) {
   if (!bundle) notFound();
 
   const { contact, transactions } = bundle;
-  const balance =
-    contact.contact_user_id != null ? await getBalance(user.id, contact.contact_user_id) : null;
-  const balanceLabel =
-    balance != null ? formatDebtBalanceLabel(balance) : "Link their email to a ShareMates account to see a balance.";
+  const balance = await getContactLedgerBalance(user.id, contact.id);
+  const balanceLabel = formatDebtBalanceLabel(balance);
 
   const ids = new Set<string>();
   for (const t of transactions) {
-    ids.add(t.sender_id);
-    ids.add(t.receiver_id);
+    if (t.sender_id) ids.add(t.sender_id);
+    if (t.receiver_id) ids.add(t.receiver_id);
   }
   ids.add(user.id);
 
@@ -65,9 +63,9 @@ export default async function ContactDetailPage({ params }: Props) {
         {contact.email ? <p className="text-sm text-muted-foreground">{contact.email}</p> : null}
         <p
           className={`mt-3 text-lg font-medium tabular-nums ${
-            balance != null && balance > 0
+            balance > 0
               ? "text-emerald-700 dark:text-emerald-400"
-              : balance != null && balance < 0
+              : balance < 0
                 ? "text-amber-700 dark:text-amber-400"
                 : "text-muted-foreground"
           }`}
@@ -92,11 +90,7 @@ export default async function ContactDetailPage({ params }: Props) {
           </div>
         </CardHeader>
         <CardContent>
-          {!contact.contact_user_id ? (
-            <p className="text-sm text-muted-foreground">
-              This contact is not linked to a user yet. Add or fix their email to match their ShareMates account.
-            </p>
-          ) : transactions.length === 0 ? (
+          {transactions.length === 0 ? (
             <p className="text-sm text-muted-foreground">No ledger entries yet.</p>
           ) : (
             <ul className="space-y-3">
@@ -105,7 +99,14 @@ export default async function ContactDetailPage({ params }: Props) {
                   key={t.id}
                   className="rounded-lg border border-border/50 bg-background/50 px-3 py-2 text-sm"
                 >
-                  <p>{describeDebtTransactionForViewer(t, user.id, nameByUserId)}</p>
+                  <p>
+                    {describeDebtTransactionForViewer(
+                      t,
+                      user.id,
+                      nameByUserId,
+                      contact.name,
+                    )}
+                  </p>
                   <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
                     <span className="uppercase tracking-wide">{t.type}</span>
                     <span>{new Date(t.created_at).toLocaleString()}</span>

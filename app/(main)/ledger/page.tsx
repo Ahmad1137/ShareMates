@@ -1,7 +1,13 @@
 import { listContactsWithBalances } from "@/app/actions/debt";
 import { LedgerForms } from "@/components/debt/ledger-forms";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, NotebookPen } from "lucide-react";
 import Link from "next/link";
@@ -13,9 +19,6 @@ export const metadata: Metadata = {
 
 export default async function LedgerPage() {
   const contacts = await listContactsWithBalances();
-  const registered = contacts
-    .filter((c) => c.contact_user_id)
-    .map((c) => ({ contact_user_id: c.contact_user_id as string, name: c.name }));
 
   return (
     <div className="mx-auto max-w-lg space-y-6 p-4 md:p-8">
@@ -38,12 +41,14 @@ export default async function LedgerPage() {
             </span>
             <div>
               <CardTitle className="text-base">New transaction</CardTitle>
-              <CardDescription>Record lend, borrow, or settle with one person.</CardDescription>
+              <CardDescription>
+                Record lend, borrow, or settle with any contact — registered or offline.
+              </CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <LedgerForms registeredContacts={registered} />
+          <LedgerForms contacts={contacts} />
         </CardContent>
       </Card>
     </div>
