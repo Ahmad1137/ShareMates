@@ -62,9 +62,11 @@ export function AppSidebar({ user }: { user: AppUser }) {
           href="/dashboard"
           className="group flex items-center gap-2 text-lg font-semibold tracking-tight text-sidebar-foreground"
         >
-          <span className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-glow transition-transform group-hover:scale-105">
-            <Sparkles className="size-4" />
-          </span>
+          <img
+            src="/logo.svg"
+            alt="ShareMates Logo"
+            className="size-8 transition-transform group-hover:scale-105"
+          />
           <span className="gradient-text">ShareMates</span>
         </Link>
         <p className="mt-1 truncate pl-10 text-xs text-sidebar-foreground/60">

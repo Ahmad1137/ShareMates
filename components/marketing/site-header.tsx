@@ -45,9 +45,11 @@ export function SiteHeader({ loggedIn }: { loggedIn: boolean }) {
           href="/"
           className="group flex items-center gap-2 text-lg font-semibold tracking-tight"
         >
-          <span className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 text-white shadow-glow transition-transform duration-300 group-hover:scale-105 group-hover:rotate-3">
-            <Sparkles className="size-4" />
-          </span>
+          <img
+            src="/logo.svg"
+            alt="ShareMates Logo"
+            className="size-8 transition-transform duration-300 group-hover:scale-105 group-hover:rotate-3"
+          />
           <span className="gradient-text">ShareMates</span>
         </Link>
 
