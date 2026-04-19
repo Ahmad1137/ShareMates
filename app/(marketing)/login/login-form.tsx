@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
-import { Lock, Mail, UserPlus } from "lucide-react";
+import { Lock, LogIn, Mail } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -13,57 +13,43 @@ function normalizeNext(nextPath: string): string {
   return nextPath.startsWith("/") ? nextPath : "/dashboard";
 }
 
-export function SignupForm({ nextPath }: { nextPath: string }) {
+export function LoginForm({ nextPath }: { nextPath: string }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setMessage(null);
     setLoading(true);
 
     const supabase = createClient();
-    const origin = window.location.origin;
-
-    const normalizedNext = normalizeNext(nextPath);
-    const { data, error: signUpError } = await supabase.auth.signUp({
+    const { error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
-      options: {
-        emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(normalizedNext)}`,
-      },
     });
 
     setLoading(false);
 
-    if (signUpError) {
-      setError(signUpError.message);
+    if (signInError) {
+      setError(signInError.message);
       return;
     }
 
-    if (data.session) {
-      router.replace(normalizedNext);
-      return;
-    }
-
-    setMessage(
-      "Check your email for a confirmation link to finish signing up.",
-    );
+    // Single navigation; avoid refresh + push (two full RSC passes).
+    router.replace(normalizeNext(nextPath));
   }
 
   return (
     <form onSubmit={handleSubmit} className="grid gap-5">
       <div className="grid gap-2">
-        <Label htmlFor="signup-email">Email</Label>
-        <div className="relative">
-          <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Label htmlFor="login-email">Email</Label>
+        <div className="group relative">
+          <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within:text-violet-500" />
           <Input
-            id="signup-email"
+            id="login-email"
             name="email"
             type="email"
             autoComplete="email"
@@ -71,25 +57,24 @@ export function SignupForm({ nextPath }: { nextPath: string }) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
-            className="pl-9"
+            className="h-11 pl-9 transition-all duration-200 focus-visible:ring-violet-500/40"
           />
         </div>
       </div>
       <div className="grid gap-2">
-        <Label htmlFor="signup-password">Password</Label>
-        <div className="relative">
-          <Lock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Label htmlFor="login-password">Password</Label>
+        <div className="group relative">
+          <Lock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within:text-violet-500" />
           <Input
-            id="signup-password"
+            id="login-password"
             name="password"
             type="password"
-            autoComplete="new-password"
+            autoComplete="current-password"
             required
-            minLength={6}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="At least 6 characters"
-            className="pl-9"
+            placeholder="••••••••"
+            className="h-11 pl-9 transition-all duration-200 focus-visible:ring-violet-500/40"
           />
         </div>
       </div>
@@ -101,32 +86,30 @@ export function SignupForm({ nextPath }: { nextPath: string }) {
           {error}
         </p>
       ) : null}
-      {message ? (
-        <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 text-sm text-emerald-700 dark:text-emerald-300 animate-fade-in">
-          {message}
-        </p>
-      ) : null}
       <Button
         type="submit"
         disabled={loading}
         className="btn-gradient group h-11 border-0 text-white shadow-glow"
       >
         {loading ? (
-          "Creating account…"
+          <span className="flex items-center gap-2">
+            <span className="size-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+            Signing in…
+          </span>
         ) : (
           <>
-            <UserPlus className="mr-2 size-4" />
-            Create account
+            <LogIn className="mr-2 size-4 transition-transform duration-300 group-hover:translate-x-0.5" />
+            Sign in
           </>
         )}
       </Button>
       <p className="text-center text-sm text-muted-foreground">
-        Already have an account?{" "}
+        No account?{" "}
         <Link
-          href={`/login?next=${encodeURIComponent(normalizeNext(nextPath))}`}
-          className="font-medium text-emerald-700 underline-offset-4 hover:underline dark:text-emerald-400"
+          href={`/signup?next=${encodeURIComponent(normalizeNext(nextPath))}`}
+          className="font-medium text-violet-700 underline-offset-4 hover:underline dark:text-violet-400"
         >
-          Sign in
+          Sign up
         </Link>
       </p>
     </form>
