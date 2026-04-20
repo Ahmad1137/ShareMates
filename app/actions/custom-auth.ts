@@ -1,7 +1,6 @@
 "use server";
 
 import { randomUUID } from "crypto";
-import { revalidatePath } from "next/cache";
 import { sendVerificationEmail } from "@/lib/email/send-verification-email";
 import { getPublicSiteOrigin } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
@@ -98,9 +97,6 @@ export async function verifyEmailToken(token: string): Promise<{
       };
     }
 
-    revalidatePath("/dashboard");
-    revalidatePath("/groups");
-    revalidatePath("/verify-email");
     return { ok: true };
   } catch (error) {
     return {
