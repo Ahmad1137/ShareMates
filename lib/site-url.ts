@@ -7,11 +7,14 @@
  * 3. http://localhost:$PORT (local `next dev`)
  */
 export function getPublicSiteOrigin(): string {
-  const explicit = (
+  let explicit = (
     process.env.NEXT_PUBLIC_APP_URL ??
     process.env.NEXT_PUBLIC_SITE_URL ??
     ""
   ).trim();
+  // Safety: some hosts accidentally store env as "KEY=https://domain".
+  // Normalize by stripping any leading "<SOMETHING>=" prefix.
+  explicit = explicit.replace(/^[A-Z0-9_]+=+/i, "").trim();
   if (explicit) {
     const base = explicit.replace(/\/+$/, "");
     return base.includes("://") ? base : `https://${base}`;
