@@ -2,7 +2,6 @@
 
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
-import { requireUser } from "@/lib/auth";
 import { sendVerificationEmail } from "@/lib/email/send-verification-email";
 import { getPublicSiteOrigin } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
@@ -17,14 +16,22 @@ export async function sendOwnVerificationEmail(): Promise<{
   error?: string;
   message?: string;
 }> {
-  const user = await requireUser();
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
 
   const email = (user.email ?? "").trim().toLowerCase();
   if (!email) return { ok: false, error: "User email not available." };
+  const fallbackName =
+    (user.user_metadata?.full_name as string | undefined)?.trim() ||
+    (user.user_metadata?.name as string | undefined)?.trim() ||
+    email.split("@")[0] ||
+    "User";
 
   const { error: userUpsertError } = await supabase.from("users").upsert(
-    { id: user.id, email, name: user.name, email_verified: false },
+    { id: user.id, email, name: fallbackName, email_verified: false },
     { onConflict: "id" },
   );
   if (userUpsertError) return { ok: false, error: userUpsertError.message };
@@ -63,8 +70,12 @@ export async function verifyEmailToken(token: string): Promise<{
   ok: boolean;
   error?: string;
 }> {
-  const user = await requireUser();
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Please sign in before verification." };
+
   const trimmed = token.trim();
   if (!trimmed) return { ok: false, error: "Invalid verification token." };
 

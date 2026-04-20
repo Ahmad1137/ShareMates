@@ -30,9 +30,16 @@ export function SignupForm({ nextPath }: { nextPath: string }) {
 
     const supabase = createClient();
     const normalizedNext = normalizeNext(nextPath);
+    const fallbackName = email.split("@")[0]?.trim() || "User";
     const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          name: fallbackName,
+          full_name: fallbackName,
+        },
+      },
     });
 
     setLoading(false);
