@@ -1,6 +1,7 @@
 import { AddExpenseDialog } from "@/components/add-expense-dialog";
 import { AddMemberDialog } from "@/components/add-member-dialog";
 import { BalanceBarChart } from "@/components/balance-bar-chart";
+import { DeleteGroupDialog } from "@/components/delete-group-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -223,6 +224,9 @@ export default async function GroupDetailPage({ params }: PageProps) {
                 groupId={groupId}
                 memberCount={members.length}
               />
+              {isCreator ? (
+                <DeleteGroupDialog groupId={groupId} groupName={group.name} />
+              ) : null}
             </div>
           </div>
         </div>

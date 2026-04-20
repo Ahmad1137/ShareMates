@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { getPublicSiteOrigin } from "@/lib/site-url";
 
 type SendInviteInput = {
   to: string;
@@ -31,28 +32,37 @@ export async function sendInviteEmail(input: SendInviteInput): Promise<{
     auth: { user, pass },
   });
   const subject = `You're invited to join ${input.groupName} on ShareMates`;
+  const siteOrigin = getPublicSiteOrigin();
+  const logoUrl = `${siteOrigin}/logo.svg`;
+  const safeGroupName = escapeHtml(input.groupName);
 
   const html = `
-    <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111827;">
-      <h2 style="margin: 0 0 12px;">You've been invited to ShareMates</h2>
-      <p style="margin: 0 0 12px;">
-        Someone invited you to join the group <strong>${escapeHtml(input.groupName)}</strong>.
-      </p>
-      <p style="margin: 0 0 16px;">
-        Click below to accept the invitation:
-      </p>
-      <p style="margin: 0 0 20px;">
-        <a href="${input.inviteUrl}" style="background:#111827;color:#fff;padding:10px 14px;border-radius:8px;text-decoration:none;display:inline-block;">
-          Accept invitation
-        </a>
-      </p>
-      <p style="margin: 0 0 8px; font-size: 14px; color: #4b5563;">
-        If you don't have an account yet, sign up first with this same email, then open the invite link again.
-      </p>
-      <p style="margin: 0; font-size: 12px; color: #6b7280;">
-        If the button does not work, copy and paste this link:<br />
-        ${input.inviteUrl}
-      </p>
+    <div style="margin:0;background:#f3f4f6;padding:24px 12px;">
+      <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:16px;overflow:hidden;font-family:Inter,Arial,sans-serif;color:#111827;">
+        <div style="padding:18px 22px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:10px;">
+          <img src="${logoUrl}" alt="ShareMates" width="28" height="28" style="display:block;border-radius:8px;" />
+          <span style="font-size:16px;font-weight:700;">ShareMates</span>
+        </div>
+        <div style="padding:24px 22px;">
+          <p style="margin:0 0 10px;font-size:13px;color:#0f766e;font-weight:600;letter-spacing:0.3px;">GROUP INVITATION</p>
+          <h2 style="margin:0 0 12px;font-size:24px;line-height:1.3;">You're invited to join <span style="color:#0f766e;">${safeGroupName}</span></h2>
+          <p style="margin:0 0 18px;color:#374151;line-height:1.6;">
+            Someone added you to a ShareMates group. Open the invite below to join and start splitting expenses fairly.
+          </p>
+          <p style="margin:0 0 18px;">
+            <a href="${input.inviteUrl}" style="background:#0f766e;color:#ffffff;padding:12px 16px;border-radius:10px;text-decoration:none;display:inline-block;font-weight:600;">
+              Accept invitation
+            </a>
+          </p>
+          <p style="margin:0 0 10px;font-size:14px;color:#4b5563;line-height:1.6;">
+            If you don't have an account yet, sign up first with this same email, then open this invite again.
+          </p>
+          <p style="margin:0;font-size:12px;color:#6b7280;line-height:1.6;word-break:break-all;">
+            Button not working? Copy this link:<br />
+            ${input.inviteUrl}
+          </p>
+        </div>
+      </div>
     </div>
   `;
 

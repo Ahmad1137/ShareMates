@@ -16,10 +16,12 @@ export async function createGroup(formData: FormData) {
 
   const supabase = await createClient();
 
-  const { error: profileError } = await supabase.from("users").upsert(
-    { id: user.id, email: user.email, name: user.name },
-    { onConflict: "id" },
-  );
+  const { error: profileError } = await supabase
+    .from("users")
+    .upsert(
+      { id: user.id, email: user.email, name: user.name },
+      { onConflict: "id" },
+    );
   if (profileError) {
     return { error: profileError.message };
   }
@@ -61,15 +63,20 @@ export async function addMemberByEmail(groupId: string, email: string) {
     return { error: findError.message };
   }
   if (target) {
-    const { data: addResult, error } = await supabase.rpc("add_member_to_group", {
-      p_group_id: groupId,
-      p_user_id: target.id,
-    });
+    const { data: addResult, error } = await supabase.rpc(
+      "add_member_to_group",
+      {
+        p_group_id: groupId,
+        p_user_id: target.id,
+      },
+    );
 
     if (error) {
       const message = error.message ?? "Could not add member.";
       if (message.includes("forbidden")) {
-        return { error: "You don't have permission to add members to this group." };
+        return {
+          error: "You don't have permission to add members to this group.",
+        };
       }
       return {
         error: `${message} Run db/015_add_member_rpc.sql in Supabase SQL Editor if this persists.`,
@@ -110,13 +117,15 @@ export async function addMemberByEmail(groupId: string, email: string) {
   let inviteToken = existingInvite?.token ?? null;
   if (!inviteToken) {
     inviteToken = crypto.randomUUID();
-    const { error: inviteCreateError } = await supabase.from("invitations").insert({
-      group_id: groupId,
-      invited_by: user.id,
-      email: normalized,
-      token: inviteToken,
-      status: "pending",
-    });
+    const { error: inviteCreateError } = await supabase
+      .from("invitations")
+      .insert({
+        group_id: groupId,
+        invited_by: user.id,
+        email: normalized,
+        token: inviteToken,
+        status: "pending",
+      });
     if (inviteCreateError) {
       return { error: inviteCreateError.message };
     }
@@ -138,4 +147,38 @@ export async function addMemberByEmail(groupId: string, email: string) {
     emailSent: emailResult.sent,
     emailReason: emailResult.reason,
   };
+}
+
+export async function deleteGroup(groupId: string) {
+  const user = await requireUser();
+  const supabase = await createClient();
+
+  const { data: group, error: groupError } = await supabase
+    .from("groups")
+    .select("id, created_by")
+    .eq("id", groupId)
+    .maybeSingle();
+
+  if (groupError) {
+    return { error: groupError.message };
+  }
+  if (!group) {
+    return { error: "Group not found." };
+  }
+  if (group.created_by !== user.id) {
+    return { error: "Only the group creator can delete this group." };
+  }
+
+  const { error: deleteError } = await supabase
+    .from("groups")
+    .delete()
+    .eq("id", groupId);
+
+  if (deleteError) {
+    return { error: deleteError.message };
+  }
+
+  revalidatePath("/groups");
+  revalidatePath("/dashboard");
+  return { ok: true as const };
 }
