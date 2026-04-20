@@ -2,6 +2,7 @@ import { AddExpenseDialog } from "@/components/add-expense-dialog";
 import { AddMemberDialog } from "@/components/add-member-dialog";
 import { BalanceBarChart } from "@/components/balance-bar-chart";
 import { DeleteGroupDialog } from "@/components/delete-group-dialog";
+import { GroupMonthlySummary } from "@/components/group-monthly-summary";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -230,6 +231,10 @@ export default async function GroupDetailPage({ params }: PageProps) {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="animate-fade-up [animation-delay:60ms]">
+        <GroupMonthlySummary groupId={groupId} />
       </div>
 
       {/* Balances + Members */}

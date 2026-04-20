@@ -597,3 +597,65 @@ export async function getDebtDashboardTotals(): Promise<{
   }
   return { totalYouOwe, totalOwedToYou };
 }
+
+export async function deleteContactTransaction(
+  contactRowId: string,
+  transactionId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await requireUser();
+  const supabase = await createClient();
+
+  const contact = await getMyContactRow(contactRowId);
+  if (!contact || contact.user_id !== user.id) {
+    return { ok: false, error: "Contact not found." };
+  }
+
+  const { data: tx, error: txError } = await supabase
+    .from("transactions")
+    .select("id, contact_id, sender_id, receiver_id")
+    .eq("id", transactionId)
+    .maybeSingle();
+  if (txError) return { ok: false, error: txError.message };
+  if (!tx) return { ok: false, error: "Transaction not found." };
+
+  const txContactId = (tx as DebtTransactionRow).contact_id ?? null;
+  if (txContactId) {
+    if (txContactId !== contact.id) {
+      return {
+        ok: false,
+        error: "You can only delete transactions from this contact.",
+      };
+    }
+  } else {
+    const cpUser = contact.contact_user_id;
+    if (!cpUser) {
+      return {
+        ok: false,
+        error: "This transaction cannot be verified for this contact.",
+      };
+    }
+    const sender = (tx as DebtTransactionRow).sender_id;
+    const receiver = (tx as DebtTransactionRow).receiver_id;
+    const isPairMatch =
+      (sender === user.id && receiver === cpUser) ||
+      (sender === cpUser && receiver === user.id);
+    if (!isPairMatch) {
+      return {
+        ok: false,
+        error: "You can only delete transactions from this contact.",
+      };
+    }
+  }
+
+  const { error: deleteError } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("id", transactionId);
+  if (deleteError) return { ok: false, error: deleteError.message };
+
+  revalidatePath(`/contacts/${contact.id}`);
+  revalidatePath("/contacts");
+  revalidatePath("/dashboard");
+  revalidatePath("/ledger");
+  return { ok: true };
+}

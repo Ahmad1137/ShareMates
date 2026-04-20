@@ -1,4 +1,5 @@
 import { getContactLedgerBalance, getTransactionsForContactRow } from "@/app/actions/debt";
+import { DeleteTransactionDialog } from "@/components/debt/delete-transaction-dialog";
 import { describeDebtTransactionForViewer } from "@/lib/debt/describe-transaction";
 import { formatDebtBalanceLabel } from "@/lib/debt/balance";
 import { buttonVariants } from "@/components/ui/button";
@@ -99,6 +100,12 @@ export default async function ContactDetailPage({ params }: Props) {
                   key={t.id}
                   className="rounded-lg border border-border/50 bg-background/50 px-3 py-2 text-sm"
                 >
+                  <div className="mb-1 flex justify-end">
+                    <DeleteTransactionDialog
+                      contactId={contact.id}
+                      transactionId={t.id}
+                    />
+                  </div>
                   <p>
                     {describeDebtTransactionForViewer(
                       t,

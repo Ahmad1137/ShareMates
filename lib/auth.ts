@@ -24,6 +24,20 @@ export async function requireUser(): Promise<AppUser> {
     email.split("@")[0] ??
     "User";
 
+  const { data: profile, error: profileError } = await supabase
+    .from("users")
+    .select("email_verified")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (!profileError) {
+    const verified = Boolean(
+      (profile as { email_verified?: boolean } | null)?.email_verified,
+    );
+    if (!verified) {
+      redirect("/verify-email");
+    }
+  }
+
   // Avoid a DB upsert on every navigation — that added ~1 round-trip per
   // request and stacked with middleware getUser(). New auth users are inserted
   // via the `on_auth_user_created` trigger on public.users.

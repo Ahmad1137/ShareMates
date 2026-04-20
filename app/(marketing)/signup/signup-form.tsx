@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { sendOwnVerificationEmail } from "@/app/actions/custom-auth";
 import { createClient } from "@/lib/supabase/client";
 import { Lock, Mail, UserPlus } from "lucide-react";
 import Link from "next/link";
@@ -11,17 +12,6 @@ import { useState } from "react";
 
 function normalizeNext(nextPath: string): string {
   return nextPath.startsWith("/") ? nextPath : "/dashboard";
-}
-
-function getSignupRedirectOrigin(): string {
-  const configured = (
-    process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? ""
-  ).trim();
-  if (configured) {
-    const base = configured.replace(/\/+$/, "");
-    return base.includes("://") ? base : `https://${base}`;
-  }
-  return window.location.origin;
 }
 
 export function SignupForm({ nextPath }: { nextPath: string }) {
@@ -39,15 +29,10 @@ export function SignupForm({ nextPath }: { nextPath: string }) {
     setLoading(true);
 
     const supabase = createClient();
-    const origin = getSignupRedirectOrigin();
-
     const normalizedNext = normalizeNext(nextPath);
     const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(normalizedNext)}`,
-      },
     });
 
     setLoading(false);
@@ -58,12 +43,17 @@ export function SignupForm({ nextPath }: { nextPath: string }) {
     }
 
     if (data.session) {
-      router.replace(normalizedNext);
+      const verifyRes = await sendOwnVerificationEmail();
+      if (!verifyRes.ok) {
+        setError(verifyRes.error ?? "Could not send verification email.");
+        return;
+      }
+      router.replace("/verify-email");
       return;
     }
 
     setMessage(
-      "Check your email for a confirmation link to finish signing up.",
+      "Signup created. Disable Supabase confirm-email and use custom verification flow.",
     );
   }
 

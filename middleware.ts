@@ -17,6 +17,8 @@ export const config = {
     "/ledger/:path*",
     "/profile/:path*",
     "/invite/:path*",
+    "/verify-email",
+    "/auth/verify-email",
     "/auth/callback",
   ],
 };
