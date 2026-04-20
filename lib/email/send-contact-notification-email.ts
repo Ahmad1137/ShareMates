@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { getPublicSiteOrigin } from "@/lib/site-url";
 
 type SendContactNotificationInput = {
   to: string;
@@ -34,6 +35,7 @@ export async function sendContactNotificationEmail(
   });
 
   const subject = `${input.adderName} added you as a contact on ShareMates`;
+  const contactsUrl = `${getPublicSiteOrigin()}/contacts`;
 
   const html = `
     <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111827;">
@@ -45,7 +47,7 @@ export async function sendContactNotificationEmail(
         You can now track shared expenses and balances with ${escapeHtml(input.adderName)}.
       </p>
       <p style="margin: 0 0 20px;">
-        <a href="${process.env.NEXT_PUBLIC_APP_URL || "https://yourapp.com"}/contacts" style="background:#111827;color:#fff;padding:10px 14px;border-radius:8px;text-decoration:none;display:inline-block;">
+        <a href="${contactsUrl}" style="background:#111827;color:#fff;padding:10px 14px;border-radius:8px;text-decoration:none;display:inline-block;">
           View your contacts
         </a>
       </p>
