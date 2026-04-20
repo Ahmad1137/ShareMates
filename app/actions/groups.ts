@@ -1,6 +1,7 @@
 "use server";
 
 import { requireUser } from "@/lib/auth";
+import { sendGroupAddedEmail } from "@/lib/email/send-group-added-email";
 import { sendInviteEmail } from "@/lib/email/send-invite-email";
 import { getPublicSiteOrigin } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
@@ -86,10 +87,32 @@ export async function addMemberByEmail(groupId: string, email: string) {
       return { error: "That person is already in this group." };
     }
 
+    const { data: group, error: groupError } = await supabase
+      .from("groups")
+      .select("name")
+      .eq("id", groupId)
+      .maybeSingle();
+    if (groupError || !group) {
+      return { error: groupError?.message ?? "Group not found." };
+    }
+
+    const groupUrl = `${getPublicSiteOrigin()}/group/${groupId}`;
+    const emailResult = await sendGroupAddedEmail({
+      to: normalized,
+      groupName: group.name,
+      groupUrl,
+    });
+
     revalidatePath(`/group/${groupId}`);
     revalidatePath("/groups");
     revalidatePath("/dashboard");
-    return { ok: true as const, mode: "added" as const };
+    return {
+      ok: true as const,
+      mode: "added" as const,
+      email: normalized,
+      emailSent: emailResult.sent,
+      emailReason: emailResult.reason,
+    };
   }
 
   // Not registered yet: create or reuse a pending invitation.

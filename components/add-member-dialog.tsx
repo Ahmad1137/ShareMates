@@ -46,7 +46,13 @@ export function AddMemberDialog({ groupId }: { groupId: string }) {
         }
       }
       if ("mode" in res && res.mode === "added") {
-        setInfo(`Member ${email.toLowerCase()} added to the group.`);
+        if ("emailSent" in res && res.emailSent) {
+          setInfo(`Member ${email.toLowerCase()} added. Email notification sent.`);
+        } else {
+          setInfo(
+            `Member ${email.toLowerCase()} added, but email could not be sent${"emailReason" in res && res.emailReason ? `: ${res.emailReason}` : "."}`,
+          );
+        }
       }
       form.reset();
       setOpen(false);

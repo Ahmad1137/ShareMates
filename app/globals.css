@@ -160,6 +160,7 @@
 
   /* Smoother scrolling + consistent transitions on interactive elements */
   a, button {
+    @apply cursor-pointer;
     transition:
       color 0.2s ease,
       background-color 0.25s ease,
