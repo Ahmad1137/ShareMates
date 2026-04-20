@@ -8,48 +8,31 @@ export async function acceptInvitation(token: string) {
   const user = await requireUser();
   const supabase = await createClient();
 
-  const { data: invite, error: inviteError } = await supabase
-    .from("invitations")
-    .select("id, group_id, email, status")
-    .eq("token", token)
-    .maybeSingle();
-
-  if (inviteError) {
-    return { error: inviteError.message };
-  }
-  if (!invite) {
-    return { error: "Invitation not found." };
-  }
-  if (invite.status !== "pending") {
-    return { error: "This invitation is no longer pending." };
-  }
-  if ((invite.email ?? "").toLowerCase() !== (user.email ?? "").toLowerCase()) {
+  const { data: groupId, error } = await supabase.rpc("accept_invitation_member", {
+    p_token: token,
+  });
+  if (error || !groupId) {
+    const message = error?.message ?? "Could not accept invitation.";
+    if (message.includes("different email")) {
+      return {
+        error:
+          "This invitation belongs to a different email. Sign in with the invited email.",
+      };
+    }
+    if (message.includes("no longer pending")) {
+      return { error: "This invitation is no longer pending." };
+    }
+    if (message.includes("not found")) {
+      return { error: "Invitation not found." };
+    }
     return {
       error:
-        "This invitation belongs to a different email. Sign in with the invited email.",
+        `${message} Run db/014_accept_invitation_rpc.sql in Supabase SQL Editor if this persists.`,
     };
   }
 
-  const { error: memberError } = await supabase.from("members").insert({
-    group_id: invite.group_id,
-    user_id: user.id,
-  });
-
-  if (memberError && memberError.code !== "23505") {
-    return { error: memberError.message };
-  }
-
-  const { error: updateError } = await supabase
-    .from("invitations")
-    .update({ status: "accepted", accepted_at: new Date().toISOString() })
-    .eq("id", invite.id);
-
-  if (updateError) {
-    return { error: updateError.message };
-  }
-
-  revalidatePath(`/group/${invite.group_id}`);
+  revalidatePath(`/group/${groupId}`);
   revalidatePath("/groups");
   revalidatePath("/dashboard");
-  return { ok: true as const, groupId: invite.group_id };
+  return { ok: true as const, groupId };
 }

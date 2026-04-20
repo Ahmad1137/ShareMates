@@ -13,6 +13,17 @@ function normalizeNext(nextPath: string): string {
   return nextPath.startsWith("/") ? nextPath : "/dashboard";
 }
 
+function getSignupRedirectOrigin(): string {
+  const configured = (
+    process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? ""
+  ).trim();
+  if (configured) {
+    const base = configured.replace(/\/+$/, "");
+    return base.includes("://") ? base : `https://${base}`;
+  }
+  return window.location.origin;
+}
+
 export function SignupForm({ nextPath }: { nextPath: string }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -28,7 +39,7 @@ export function SignupForm({ nextPath }: { nextPath: string }) {
     setLoading(true);
 
     const supabase = createClient();
-    const origin = window.location.origin;
+    const origin = getSignupRedirectOrigin();
 
     const normalizedNext = normalizeNext(nextPath);
     const { data, error: signUpError } = await supabase.auth.signUp({
