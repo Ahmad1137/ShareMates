@@ -99,12 +99,6 @@ export async function verifyEmailToken(token: string): Promise<{
     .eq("id", user.id);
   if (userUpdateError) return { ok: false, error: userUpdateError.message };
 
-  const { error: cleanupError } = await supabase
-    .from("email_verification_tokens")
-    .delete()
-    .eq("user_id", user.id);
-  if (cleanupError) return { ok: false, error: cleanupError.message };
-
   revalidatePath("/dashboard");
   revalidatePath("/groups");
   return { ok: true };
