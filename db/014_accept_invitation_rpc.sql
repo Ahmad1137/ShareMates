@@ -11,10 +11,19 @@ AS $$
 DECLARE
   uid uuid;
   user_email text;
+  user_name text;
   v_invite public.invitations%ROWTYPE;
 BEGIN
   uid := (SELECT auth.uid());
   user_email := lower(trim(coalesce((SELECT auth.jwt() ->> 'email'), '')));
+  user_name := trim(
+    coalesce(
+      (SELECT auth.jwt() -> 'user_metadata' ->> 'full_name'),
+      (SELECT auth.jwt() -> 'user_metadata' ->> 'name'),
+      split_part(user_email, '@', 1),
+      'member'
+    )
+  );
 
   IF uid IS NULL THEN
     RAISE EXCEPTION 'not authenticated';
@@ -37,6 +46,13 @@ BEGIN
   IF v_invite.status = 'cancelled' THEN
     RAISE EXCEPTION 'invitation is no longer pending';
   END IF;
+
+  -- Ensure FK target exists even if auth->public sync trigger was never installed.
+  INSERT INTO public.users (id, name, email)
+  VALUES (uid, user_name, user_email)
+  ON CONFLICT (id) DO UPDATE
+    SET name = EXCLUDED.name,
+        email = EXCLUDED.email;
 
   INSERT INTO public.members (group_id, user_id)
   VALUES (v_invite.group_id, uid)

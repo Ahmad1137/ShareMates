@@ -61,16 +61,22 @@ export async function addMemberByEmail(groupId: string, email: string) {
     return { error: findError.message };
   }
   if (target) {
-    const { error } = await supabase.from("members").insert({
-      group_id: groupId,
-      user_id: target.id,
+    const { data: addResult, error } = await supabase.rpc("add_member_to_group", {
+      p_group_id: groupId,
+      p_user_id: target.id,
     });
 
     if (error) {
-      if (error.code === "23505") {
-        return { error: "That person is already in this group." };
+      const message = error.message ?? "Could not add member.";
+      if (message.includes("forbidden")) {
+        return { error: "You don't have permission to add members to this group." };
       }
-      return { error: error.message };
+      return {
+        error: `${message} Run db/015_add_member_rpc.sql in Supabase SQL Editor if this persists.`,
+      };
+    }
+    if (addResult === "already") {
+      return { error: "That person is already in this group." };
     }
 
     revalidatePath(`/group/${groupId}`);
