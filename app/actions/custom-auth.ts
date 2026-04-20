@@ -70,36 +70,42 @@ export async function verifyEmailToken(token: string): Promise<{
   ok: boolean;
   error?: string;
 }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Please sign in before verification." };
+  try {
+    const supabase = await createClient();
 
-  const trimmed = token.trim();
-  if (!trimmed) return { ok: false, error: "Invalid verification token." };
+    const trimmed = token.trim();
+    if (!trimmed) return { ok: false, error: "Invalid verification token." };
 
-  const { data: row, error: tokenError } = await supabase
-    .from("email_verification_tokens")
-    .select("id, user_id, expires_at")
-    .eq("token", trimmed)
-    .maybeSingle();
-  if (tokenError) return { ok: false, error: tokenError.message };
-  if (!row) return { ok: false, error: "Verification link is invalid." };
-  if (row.user_id !== user.id) {
-    return { ok: false, error: "This verification link belongs to another account." };
+    const { error } = await supabase.rpc("verify_email_with_token", {
+      p_token: trimmed,
+    });
+    if (error) {
+      const message = (error.message ?? "").toLowerCase();
+      if (message.includes("invalid token")) {
+        return { ok: false, error: "Verification link is invalid." };
+      }
+      if (message.includes("expired token")) {
+        return { ok: false, error: "Verification link has expired." };
+      }
+      if (message.includes("missing token")) {
+        return { ok: false, error: "Missing verification token." };
+      }
+      return {
+        ok: false,
+        error:
+          (error.message ?? "Verification failed.") +
+          " Run db/018_verify_email_with_token_rpc.sql in Supabase SQL Editor if this persists.",
+      };
+    }
+
+    revalidatePath("/dashboard");
+    revalidatePath("/groups");
+    revalidatePath("/verify-email");
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Verification failed.",
+    };
   }
-  if (new Date(row.expires_at).getTime() < Date.now()) {
-    return { ok: false, error: "Verification link has expired." };
-  }
-
-  const { error: userUpdateError } = await supabase
-    .from("users")
-    .update({ email_verified: true })
-    .eq("id", user.id);
-  if (userUpdateError) return { ok: false, error: userUpdateError.message };
-
-  revalidatePath("/dashboard");
-  revalidatePath("/groups");
-  return { ok: true };
 }
