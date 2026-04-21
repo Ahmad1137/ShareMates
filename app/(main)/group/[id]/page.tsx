@@ -243,8 +243,8 @@ export default async function GroupDetailPage({ params }: PageProps) {
           <CardHeader>
             <CardTitle className="text-lg">Group balances</CardTitle>
             <CardDescription>
-              Positive = net lent to the group; negative = net owed. Sum rounds
-              to zero.
+              Each person’s share is their split total; paid is what they
+              fronted. The chart is paid minus share (who covered more vs less).
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -1,7 +1,7 @@
 "use client";
 
 import type { UserBalance } from "@/lib/balances";
-import { TrendingDown, TrendingUp } from "lucide-react";
+import { Wallet } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -13,13 +13,12 @@ import {
   YAxis,
 } from "recharts";
 
-const POS = "#10b981";
-const NEG = "#f43f5e";
-
 export function BalanceBarChart({ rows }: { rows: UserBalance[] }) {
   const data = rows.map((r) => ({
     name: r.name.length > 12 ? `${r.name.slice(0, 11)}…` : r.name,
     fullName: r.name,
+    paid: r.paid,
+    share: r.share,
     net: r.net,
   }));
 
@@ -27,7 +26,7 @@ export function BalanceBarChart({ rows }: { rows: UserBalance[] }) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
         <div className="flex size-12 items-center justify-center rounded-full bg-muted/60">
-          <TrendingUp className="size-5 text-muted-foreground" />
+          <Wallet className="size-5 text-muted-foreground" />
         </div>
         <p className="text-sm text-muted-foreground">
           Add expenses to see balances.
@@ -36,48 +35,42 @@ export function BalanceBarChart({ rows }: { rows: UserBalance[] }) {
     );
   }
 
-  const topCreditor = data.reduce(
-    (a, b) => (b.net > a.net ? b : a),
-    data[0]!,
-  );
-  const topDebtor = data.reduce((a, b) => (b.net < a.net ? b : a), data[0]!);
-
   return (
     <div className="space-y-4">
-      <div className="grid gap-2 sm:grid-cols-2">
-        <div className="flex items-center gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-700 dark:text-emerald-400">
-            <TrendingUp className="size-4" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs uppercase tracking-wider text-emerald-700/80 dark:text-emerald-400/80">
-              Net lent
-            </p>
-            <p className="truncate text-sm font-semibold">
-              {topCreditor.fullName}
-              <span className="ml-1 font-mono tabular-nums text-emerald-700 dark:text-emerald-300">
-                +${topCreditor.net.toFixed(2)}
-              </span>
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2.5">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-rose-500/20 text-rose-700 dark:text-rose-400">
-            <TrendingDown className="size-4" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs uppercase tracking-wider text-rose-700/80 dark:text-rose-400/80">
-              Net owed
-            </p>
-            <p className="truncate text-sm font-semibold">
-              {topDebtor.fullName}
-              <span className="ml-1 font-mono tabular-nums text-rose-700 dark:text-rose-300">
-                ${topDebtor.net.toFixed(2)}
-              </span>
-            </p>
-          </div>
-        </div>
+      <div className="rounded-xl border border-border/50 bg-background/40 px-3 py-2.5 text-xs text-muted-foreground">
+        <strong className="text-foreground">How to read this:</strong> each
+        person’s <span className="font-medium text-foreground">share</span> is
+        their part of the bills (from splits).{" "}
+        <span className="font-medium text-foreground">Paid</span> is cash they
+        put in. The bar is{" "}
+        <span className="font-medium text-foreground">paid − share</span>{" "}
+        (positive = covered more than your share; negative = still owe your
+        share vs what you paid).
       </div>
+
+      <ul className="grid gap-2 sm:grid-cols-2">
+        {rows.map((r) => (
+          <li
+            key={r.userId}
+            className="rounded-xl border border-border/50 bg-background/50 px-3 py-2.5 text-sm"
+          >
+            <p className="truncate font-medium">{r.name}</p>
+            <p className="mt-1 font-mono text-xs tabular-nums text-muted-foreground">
+              Share ${r.share.toFixed(2)} · Paid ${r.paid.toFixed(2)}
+              <span
+                className={
+                  r.net >= 0
+                    ? " text-emerald-700 dark:text-emerald-400"
+                    : " text-rose-700 dark:text-rose-400"
+                }
+              >
+                {" "}
+                · Balance {r.net >= 0 ? "+" : ""}${r.net.toFixed(2)}
+              </span>
+            </p>
+          </li>
+        ))}
+      </ul>
 
       <ResponsiveContainer width="100%" height={260}>
         <BarChart
@@ -114,15 +107,23 @@ export function BalanceBarChart({ rows }: { rows: UserBalance[] }) {
           />
           <Tooltip
             cursor={{ fill: "oklch(0.7 0.1 180 / 0.08)" }}
-            formatter={(value) => [
-              `$${Number(value ?? 0).toFixed(2)}`,
-              "Net balance",
-            ]}
+            formatter={(value, name) => {
+              const v = Number(value ?? 0);
+              if (name === "paid") return [`$${v.toFixed(2)}`, "Paid"];
+              if (name === "share") return [`$${v.toFixed(2)}`, "Share"];
+              return [`$${v.toFixed(2)}`, "Paid − share"];
+            }}
             labelFormatter={(_, payload) => {
               const row = payload?.[0]?.payload as
-                | { fullName?: string }
+                | {
+                    fullName?: string;
+                    paid?: number;
+                    share?: number;
+                    net?: number;
+                  }
                 | undefined;
-              return row?.fullName ?? "";
+              if (!row?.fullName) return "";
+              return `${row.fullName} · share $${Number(row.share ?? 0).toFixed(2)} · paid $${Number(row.paid ?? 0).toFixed(2)}`;
             }}
             contentStyle={{
               borderRadius: "12px",
@@ -135,6 +136,7 @@ export function BalanceBarChart({ rows }: { rows: UserBalance[] }) {
           />
           <Bar
             dataKey="net"
+            name="net"
             radius={[8, 8, 0, 0]}
             maxBarSize={56}
             animationDuration={700}
