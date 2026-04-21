@@ -61,6 +61,15 @@ function isMissingContactLedgerRpc(
   );
 }
 
+function isMissingLinkContactsRpc(message: string, code?: string): boolean {
+  return (
+    /could not find the function/i.test(message) ||
+    /schema cache/i.test(message) ||
+    code === "PGRST202" ||
+    code === "42883"
+  );
+}
+
 function isMissingContactIdColumn(message: string, code?: string): boolean {
   return (
     code === "42703" ||
@@ -146,7 +155,6 @@ async function fetchMergedTransactions(
   contactRow: ContactRow,
   supabase: SupabaseServer,
 ): Promise<DebtTransactionRow[]> {
-  let scopedRows: DebtTransactionRow[] = [];
   const { data: scoped, error: scopedErr } = await supabase
     .from("transactions")
     .select(TX_SEL_FULL)
@@ -154,62 +162,37 @@ async function fetchMergedTransactions(
     .order("created_at", { ascending: false });
 
   if (!scopedErr) {
-    scopedRows = (scoped ?? []) as DebtTransactionRow[];
-  } else if (
-    isMissingContactIdColumn(scopedErr.message ?? "", scopedErr.code)
-  ) {
-    scopedRows = [];
-  } else {
+    // Strict contact scoping once `contact_id` exists: prevents cross-contact leakage.
+    return (scoped ?? []) as DebtTransactionRow[];
+  }
+
+  if (!isMissingContactIdColumn(scopedErr.message ?? "", scopedErr.code)) {
     throw new Error(scopedErr.message);
   }
+  if (!contactRow.contact_user_id) return [];
 
-  let legacy: DebtTransactionRow[] = [];
-  if (contactRow.contact_user_id) {
-    const u = contactRow.contact_user_id;
-    const legacyWithContactCol = await supabase
-      .from("transactions")
-      .select(TX_SEL_FULL)
-      .is("contact_id", null)
-      .or(
-        `and(sender_id.eq.${ownerId},receiver_id.eq.${u}),and(sender_id.eq.${u},receiver_id.eq.${ownerId})`,
-      )
-      .order("created_at", { ascending: false });
+  const u = contactRow.contact_user_id;
+  const legacyNoContactCol = await supabase
+    .from("transactions")
+    .select(TX_SEL_LEGACY)
+    .or(
+      `and(sender_id.eq.${ownerId},receiver_id.eq.${u}),and(sender_id.eq.${u},receiver_id.eq.${ownerId})`,
+    )
+    .order("created_at", { ascending: false });
+  if (legacyNoContactCol.error)
+    throw new Error(legacyNoContactCol.error.message);
+  return (legacyNoContactCol.data ?? []).map((t) => ({
+    ...(t as DebtTransactionRow),
+    contact_id: null,
+  }));
+}
 
-    if (!legacyWithContactCol.error) {
-      legacy = (legacyWithContactCol.data ?? []).map((t) => ({
-        ...(t as DebtTransactionRow),
-        contact_id: (t as DebtTransactionRow).contact_id ?? null,
-      }));
-    } else if (
-      isMissingContactIdColumn(
-        legacyWithContactCol.error.message ?? "",
-        legacyWithContactCol.error.code,
-      )
-    ) {
-      const legacyNoContactCol = await supabase
-        .from("transactions")
-        .select(TX_SEL_LEGACY)
-        .or(
-          `and(sender_id.eq.${ownerId},receiver_id.eq.${u}),and(sender_id.eq.${u},receiver_id.eq.${ownerId})`,
-        )
-        .order("created_at", { ascending: false });
-      if (legacyNoContactCol.error)
-        throw new Error(legacyNoContactCol.error.message);
-      legacy = (legacyNoContactCol.data ?? []).map((t) => ({
-        ...(t as DebtTransactionRow),
-        contact_id: null,
-      }));
-    } else {
-      throw new Error(legacyWithContactCol.error.message);
-    }
-  }
-
-  const byId = new Map<string, DebtTransactionRow>();
-  for (const t of legacy) byId.set(t.id, t);
-  for (const t of scopedRows) byId.set(t.id, t);
-  return [...byId.values()].sort(
-    (a, b) =>
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+function filterTransactionsForCounterpartyView(
+  transactions: DebtTransactionRow[],
+  viewerUserId: string,
+): DebtTransactionRow[] {
+  return transactions.filter(
+    (t) => t.sender_id === viewerUserId || t.receiver_id === viewerUserId,
   );
 }
 
@@ -467,7 +450,11 @@ export async function getTransactionsForContactRow(
     contact,
     supabase,
   );
-  return { contact, transactions, canManage: contact.user_id === user.id };
+  const canManage = contact.user_id === user.id;
+  const visibleTransactions = canManage
+    ? transactions
+    : filterTransactionsForCounterpartyView(transactions, user.id);
+  return { contact, transactions: visibleTransactions, canManage };
 }
 
 /**
@@ -502,11 +489,14 @@ export async function getContactLedgerBalance(
 
   try {
     const txs = await fetchMergedTransactions(canonicalOwnerId, contact, supabase);
+    const visibleTxs = isOwnerView
+      ? txs
+      : filterTransactionsForCounterpartyView(txs, ownerId);
     const ownerBalance = computeContactLedgerBalanceFromTransactions(
       canonicalOwnerId,
       contact.id,
       contact.contact_user_id,
-      txs,
+      visibleTxs,
     );
     return isOwnerView ? ownerBalance : -ownerBalance;
   } catch {
@@ -529,6 +519,19 @@ export async function listContactsWithBalances(): Promise<
 > {
   const user = await requireUser();
   const supabase = await createClient();
+  const myEmail = (user.email ?? "").trim().toLowerCase();
+
+  // Backfill link for people who were added by email before they signed up.
+  if (myEmail) {
+    const { error: linkRpcError } = await supabase.rpc("link_contacts_by_email", {
+      p_user: user.id,
+      p_email: myEmail,
+    });
+    if (linkRpcError && !isMissingLinkContactsRpc(linkRpcError.message ?? "", linkRpcError.code)) {
+      console.warn("Failed to backfill shared contact links", linkRpcError.message);
+    }
+  }
+
   const { data: ownedContacts, error: ownedError } = await supabase
     .from("contacts")
     .select("id, user_id, contact_user_id, name, email, created_at")
@@ -543,7 +546,14 @@ export async function listContactsWithBalances(): Promise<
     .order("name");
   if (sharedError) throw new Error(sharedError.message);
 
-  const rows = [...((ownedContacts ?? []) as ContactRow[]), ...((sharedContacts ?? []) as ContactRow[])];
+  const ownedRows = ((ownedContacts ?? []) as ContactRow[]).filter((c) => {
+    const email = (c.email ?? "").trim().toLowerCase();
+    // Hide accidental self-contact rows to avoid duplicate "self/shared" entries.
+    if (c.contact_user_id && c.contact_user_id === user.id) return false;
+    if (myEmail && email === myEmail) return false;
+    return true;
+  });
+  const rows = [...ownedRows, ...((sharedContacts ?? []) as ContactRow[])];
   const out: (ContactRow & { balance: number; balanceLabel: string })[] = [];
 
   const unlinkedEmails = rows
@@ -632,7 +642,6 @@ export async function getDebtDashboardTotals(): Promise<{
   totalYouOwe: number;
   totalOwedToYou: number;
 }> {
-  const user = await requireUser();
   const contacts = await listContactsWithBalances();
   let totalYouOwe = 0;
   let totalOwedToYou = 0;
