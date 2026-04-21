@@ -1,6 +1,7 @@
 "use server";
 
 import { requireUser } from "@/lib/auth";
+import { normalizeExpenseCategory } from "@/lib/expense-categories";
 import { equalSplitAmounts } from "@/lib/splits/equal-split";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
@@ -26,6 +27,7 @@ export async function createExpenseWithEqualSplits(input: {
   amount: number;
   description: string;
   spentOn?: string;
+  category?: string;
 }) {
   const user = await requireUser();
   const supabase = await createClient();
@@ -33,6 +35,7 @@ export async function createExpenseWithEqualSplits(input: {
   const description = input.description.trim() || "Expense";
   const amount = Number(input.amount);
   const spentOn = normalizeSpentOn(input.spentOn);
+  const category = normalizeExpenseCategory(input.category);
   if (!Number.isFinite(amount) || amount <= 0) {
     return { error: "Enter a valid amount greater than zero." };
   }
@@ -64,6 +67,7 @@ export async function createExpenseWithEqualSplits(input: {
     amount,
     description,
     spent_on: spentOn,
+    category,
   };
 
   let expenseResult = await supabase
@@ -73,22 +77,32 @@ export async function createExpenseWithEqualSplits(input: {
     .single();
 
   const msg = expenseResult.error?.message ?? "";
-  const spentOnUnavailable =
-    msg.includes("spent_on") &&
-    (msg.includes("schema cache") ||
-      msg.includes("does not exist") ||
-      msg.includes("Could not find"));
+  const missingColumnMsg =
+    msg.includes("schema cache") ||
+    msg.includes("does not exist") ||
+    msg.includes("Could not find");
+  const spentOnUnavailable = msg.includes("spent_on") && missingColumnMsg;
+  const categoryUnavailable = msg.includes("category") && missingColumnMsg;
 
-  if (spentOnUnavailable) {
-    const { group_id, paid_by, amount: amt, description: desc } = insertPayload;
+  if (spentOnUnavailable || categoryUnavailable) {
+    const { group_id, paid_by, amount: amt, description: desc, spent_on } = insertPayload;
+    const fallbackRow = spentOnUnavailable
+      ? {
+          group_id,
+          paid_by,
+          amount: amt,
+          description: desc,
+        }
+      : {
+          group_id,
+          paid_by,
+          amount: amt,
+          description: desc,
+          spent_on,
+        };
     expenseResult = await supabase
       .from("expenses")
-      .insert({
-        group_id,
-        paid_by,
-        amount: amt,
-        description: desc,
-      })
+      .insert(fallbackRow)
       .select("id, spent_on, created_at")
       .single();
   }

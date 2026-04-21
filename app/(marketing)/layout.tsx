@@ -8,9 +8,14 @@ export default async function MarketingLayout({
   children: React.ReactNode;
 }>) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user: { id: string } | null = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user ? { id: data.user.id } : null;
+  } catch {
+    // Invalid/expired auth cookies should not break public marketing pages.
+    user = null;
+  }
 
   return (
     <div className="flex min-h-svh flex-col">

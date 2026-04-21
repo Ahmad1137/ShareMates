@@ -9,9 +9,17 @@ export type AppUser = {
 
 export async function requireUser(): Promise<AppUser> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user: {
+    id: string;
+    email?: string;
+    user_metadata?: { full_name?: string; name?: string };
+  } | null = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch {
+    user = null;
+  }
 
   if (!user) {
     redirect("/login");

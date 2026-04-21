@@ -2,7 +2,9 @@ import { AddExpenseDialog } from "@/components/add-expense-dialog";
 import { AddMemberDialog } from "@/components/add-member-dialog";
 import { BalanceBarChart } from "@/components/balance-bar-chart";
 import { DeleteGroupDialog } from "@/components/delete-group-dialog";
+import { GroupSettleUp } from "@/components/group-settle-up";
 import { GroupMonthlySummary } from "@/components/group-monthly-summary";
+import { SettleUpCard } from "@/components/settle-up-card";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -131,6 +133,11 @@ export default async function GroupDetailPage({ params }: PageProps) {
       : { data: [] as { expense_id: string; user_id: string; amount: number }[], error: null };
   const splitRows = splitsRes.data ?? [];
   const splitsError = splitsRes.error;
+  const settlementsRes = await supabase
+    .from("group_settlements")
+    .select("sender_id, receiver_id, amount")
+    .eq("group_id", groupId);
+  const settlementRows = settlementsRes.data ?? [];
 
   const memberUserIds = [...new Set(members.map((m) => m.user_id))];
 
@@ -143,6 +150,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
     splitRows,
     userNames,
     memberUserIds,
+    settlementRows,
   );
 
   const payerIds = [...new Set((expenseRows ?? []).map((e) => e.paid_by))];
@@ -220,7 +228,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <AddMemberDialog groupId={groupId} />
+              <AddMemberDialog groupId={groupId} memberCount={members.length} />
               <AddExpenseDialog
                 groupId={groupId}
                 memberCount={members.length}
@@ -306,6 +314,14 @@ export default async function GroupDetailPage({ params }: PageProps) {
         </Card>
       </div>
 
+      <div className="animate-fade-up [animation-delay:120ms]">
+        <SettleUpCard rows={balances} />
+      </div>
+
+      <div className="animate-fade-up [animation-delay:140ms]">
+        <GroupSettleUp rows={balances} groupId={groupId} currentUserId={user.id} />
+      </div>
+
       {/* Expenses */}
       <Card className="border-border/60 bg-card/70 shadow-card backdrop-blur animate-fade-up [animation-delay:160ms]">
         <CardHeader>
@@ -338,6 +354,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
                 <TableRow className="hover:bg-transparent">
                   <TableHead>Date</TableHead>
                   <TableHead>Description</TableHead>
+                  <TableHead>Category</TableHead>
                   <TableHead>Paid by</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                 </TableRow>
@@ -372,6 +389,11 @@ export default async function GroupDetailPage({ params }: PageProps) {
                         <div className="text-xs text-muted-foreground">
                           {splitLabel}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="bg-background/50">
+                          {(e as { category?: string | null }).category ?? "Other"}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         {payerNameMap.get(e.paid_by) ?? "—"}

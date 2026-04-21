@@ -18,7 +18,7 @@ export async function fetchExpensesForGroup(
 ) {
   const full = await supabase
     .from("expenses")
-    .select("id, amount, description, spent_on, created_at, paid_by")
+    .select("id, amount, description, category, spent_on, created_at, paid_by")
     .eq("group_id", groupId)
     .order("spent_on", { ascending: false })
     .order("created_at", { ascending: false });
@@ -33,7 +33,7 @@ export async function fetchExpensesForGroup(
   if (isMissingColumn(full.error.message ?? "", "spent_on")) {
     const noSpent = await supabase
       .from("expenses")
-      .select("id, amount, description, created_at, paid_by")
+      .select("id, amount, description, category, created_at, paid_by")
       .eq("group_id", groupId)
       .order("created_at", { ascending: false });
 
@@ -41,6 +41,7 @@ export async function fetchExpensesForGroup(
       const rows = (noSpent.data ?? []).map((r) => ({
         ...r,
         spent_on: null as string | null,
+        category: (r as { category?: string | null }).category ?? "Other",
       }));
       return { data: rows, error: null as null };
     }
@@ -59,6 +60,7 @@ export async function fetchExpensesForGroup(
         ...r,
         spent_on: null as string | null,
         created_at: null as string | null,
+        category: "Other" as string,
       }));
       return { data: rows, error: null as null };
     }
@@ -80,6 +82,7 @@ export async function fetchExpensesForGroup(
     const rows = (partial.data ?? []).map((r) => ({
       ...r,
       created_at: null as string | null,
+      category: (r as { category?: string | null }).category ?? "Other",
     }));
     return { data: rows, error: null as null };
   }
@@ -100,7 +103,7 @@ export async function fetchRecentExpensesForGroups(
   const full = await supabase
     .from("expenses")
     .select(
-      "id, amount, description, spent_on, created_at, group_id, paid_by, groups(name)",
+      "id, amount, description, category, spent_on, created_at, group_id, paid_by, groups(name)",
     )
     .in("group_id", groupIds)
     .order("spent_on", { ascending: false })
@@ -118,7 +121,7 @@ export async function fetchRecentExpensesForGroups(
     const noSpent = await supabase
       .from("expenses")
       .select(
-        "id, amount, description, created_at, group_id, paid_by, groups(name)",
+        "id, amount, description, category, created_at, group_id, paid_by, groups(name)",
       )
       .in("group_id", groupIds)
       .order("created_at", { ascending: false })
@@ -128,6 +131,7 @@ export async function fetchRecentExpensesForGroups(
       const rows = (noSpent.data ?? []).map((r) => ({
         ...r,
         spent_on: null as string | null,
+        category: (r as { category?: string | null }).category ?? "Other",
       }));
       return { data: rows, error: null as null };
     }
@@ -147,6 +151,7 @@ export async function fetchRecentExpensesForGroups(
         ...r,
         spent_on: null as string | null,
         created_at: null as string | null,
+        category: "Other" as string,
       }));
       return { data: rows, error: null as null };
     }

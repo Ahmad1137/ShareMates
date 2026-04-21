@@ -82,6 +82,7 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
         <p
           className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm text-destructive animate-fade-in"
           role="alert"
+          aria-live="assertive"
         >
           {error}
         </p>

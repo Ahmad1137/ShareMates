@@ -29,7 +29,15 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  await supabase.auth.getUser();
+  try {
+    await supabase.auth.getUser();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.toLowerCase().includes("refresh token")) {
+      // Clear stale auth cookies so the next request starts clean.
+      await supabase.auth.signOut();
+    }
+  }
 
   return supabaseResponse;
 }

@@ -16,12 +16,22 @@ import { Mail, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-export function AddMemberDialog({ groupId }: { groupId: string }) {
+export function AddMemberDialog({
+  groupId,
+  memberCount,
+}: {
+  groupId: string;
+  memberCount: number;
+}) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [includePrevious, setIncludePrevious] = useState<"include" | "exclude">(
+    "exclude",
+  );
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const showPreviousOption = memberCount > 2;
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -30,7 +40,11 @@ export function AddMemberDialog({ groupId }: { groupId: string }) {
     const form = e.currentTarget;
     const email = String(new FormData(form).get("email") ?? "");
     startTransition(async () => {
-      const res = await addMemberByEmail(groupId, email);
+      const res = await addMemberByEmail(
+        groupId,
+        email,
+        showPreviousOption ? includePrevious === "include" : false,
+      );
       if ("error" in res && res.error) {
         setError(res.error);
         return;
@@ -100,6 +114,31 @@ export function AddMemberDialog({ groupId }: { groupId: string }) {
                 />
               </div>
             </div>
+            {showPreviousOption ? (
+              <div className="grid gap-2 rounded-lg border border-border/50 bg-background/50 p-3">
+                <p className="text-sm font-medium">
+                  Do you want to include this member in existing expenses?
+                </p>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="include_previous"
+                    checked={includePrevious === "include"}
+                    onChange={() => setIncludePrevious("include")}
+                  />
+                  Include in existing expenses
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="include_previous"
+                    checked={includePrevious === "exclude"}
+                    onChange={() => setIncludePrevious("exclude")}
+                  />
+                  Exclude from previous expenses (start fresh)
+                </label>
+              </div>
+            ) : null}
             {error ? (
               <p
                 className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm text-destructive animate-fade-in"

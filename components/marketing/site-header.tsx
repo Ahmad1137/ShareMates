@@ -109,7 +109,10 @@ export function SiteHeader({ loggedIn }: { loggedIn: boolean }) {
           )}
 
           <details className="relative md:hidden">
-            <summary className="list-none [&::-webkit-details-marker]:hidden">
+            <summary
+              aria-label="Open navigation menu"
+              className="list-none rounded-lg [&::-webkit-details-marker]:hidden"
+            >
               <span className="flex size-9 cursor-pointer items-center justify-center rounded-lg border border-border bg-background/60 backdrop-blur transition-colors hover:bg-accent">
                 <Menu className="size-5" />
                 <span className="sr-only">Menu</span>

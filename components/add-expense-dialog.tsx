@@ -1,6 +1,7 @@
 "use client";
 
 import { createExpenseWithEqualSplits } from "@/app/actions/expenses";
+import { EXPENSE_CATEGORIES } from "@/lib/expense-categories";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -33,6 +34,7 @@ export function AddExpenseDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [spentOn, setSpentOn] = useState(() => isoTodayLocal());
+  const [category, setCategory] = useState<string>("Other");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [isRefreshing, startTransition] = useTransition();
@@ -42,6 +44,7 @@ export function AddExpenseDialog({
     setOpen(next);
     if (next) {
       setSpentOn(isoTodayLocal());
+      setCategory("Other");
     }
   }
 
@@ -61,6 +64,7 @@ export function AddExpenseDialog({
         amount,
         description,
         spentOn,
+        category,
       });
 
       if ("error" in res && res.error) {
@@ -148,6 +152,22 @@ export function AddExpenseDialog({
                 placeholder="Dinner, Uber, groceries…"
                 className="h-11"
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="expense-category">Category</Label>
+              <select
+                id="expense-category"
+                name="category"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="h-11 rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+              >
+                {EXPENSE_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
             </div>
             {error ? (
               <p

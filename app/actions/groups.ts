@@ -3,6 +3,7 @@
 import { requireUser } from "@/lib/auth";
 import { sendGroupAddedEmail } from "@/lib/email/send-group-added-email";
 import { sendInviteEmail } from "@/lib/email/send-invite-email";
+import { recalculateGroupHistoricalSplits } from "@/lib/group-split-recalc";
 import { getPublicSiteOrigin } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
@@ -46,7 +47,11 @@ export async function createGroup(formData: FormData) {
   redirect(`/group/${groupId}`);
 }
 
-export async function addMemberByEmail(groupId: string, email: string) {
+export async function addMemberByEmail(
+  groupId: string,
+  email: string,
+  includeInPrevious = false,
+) {
   const user = await requireUser();
   const normalized = email.trim().toLowerCase();
   if (!normalized) {
@@ -64,13 +69,24 @@ export async function addMemberByEmail(groupId: string, email: string) {
     return { error: findError.message };
   }
   if (target) {
-    const { data: addResult, error } = await supabase.rpc(
-      "add_member_to_group",
-      {
+    let addResult: string | null = null;
+    let error: { message?: string } | null = null;
+    const rpcNew = await supabase.rpc("add_member_to_group", {
+      p_group_id: groupId,
+      p_user_id: target.id,
+      p_include_in_previous: includeInPrevious,
+    });
+    if (rpcNew.error && rpcNew.error.message.includes("function")) {
+      const rpcOld = await supabase.rpc("add_member_to_group", {
         p_group_id: groupId,
         p_user_id: target.id,
-      },
-    );
+      });
+      addResult = rpcOld.data as string | null;
+      error = rpcOld.error;
+    } else {
+      addResult = rpcNew.data as string | null;
+      error = rpcNew.error;
+    }
 
     if (error) {
       const message = error.message ?? "Could not add member.";
@@ -85,6 +101,13 @@ export async function addMemberByEmail(groupId: string, email: string) {
     }
     if (addResult === "already") {
       return { error: "That person is already in this group." };
+    }
+
+    if (includeInPrevious) {
+      const recalc = await recalculateGroupHistoricalSplits(supabase, groupId);
+      if ("error" in recalc && recalc.error) {
+        return { error: recalc.error };
+      }
     }
 
     const { data: group, error: groupError } = await supabase
@@ -140,7 +163,8 @@ export async function addMemberByEmail(groupId: string, email: string) {
   let inviteToken = existingInvite?.token ?? null;
   if (!inviteToken) {
     inviteToken = crypto.randomUUID();
-    const { error: inviteCreateError } = await supabase
+    let inviteCreateError: { message?: string } | null = null;
+    const inviteCreate = await supabase
       .from("invitations")
       .insert({
         group_id: groupId,
@@ -148,7 +172,21 @@ export async function addMemberByEmail(groupId: string, email: string) {
         email: normalized,
         token: inviteToken,
         status: "pending",
+        include_in_previous: includeInPrevious,
       });
+    inviteCreateError = inviteCreate.error;
+    if (inviteCreateError && inviteCreateError.message?.includes("include_in_previous")) {
+      const fallbackInviteCreate = await supabase
+        .from("invitations")
+        .insert({
+          group_id: groupId,
+          invited_by: user.id,
+          email: normalized,
+          token: inviteToken,
+          status: "pending",
+        });
+      inviteCreateError = fallbackInviteCreate.error;
+    }
     if (inviteCreateError) {
       return { error: inviteCreateError.message };
     }

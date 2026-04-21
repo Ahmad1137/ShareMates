@@ -10,6 +10,12 @@ export type SplitRow = {
   amount: number | string;
 };
 
+export type GroupSettlementRow = {
+  sender_id: string;
+  receiver_id: string;
+  amount: number | string;
+};
+
 export type UserBalance = {
   userId: string;
   name: string;
@@ -30,6 +36,7 @@ export function computeGroupBalances(
   splits: SplitRow[],
   userNames: Map<string, string>,
   memberUserIds?: string[],
+  settlements?: GroupSettlementRow[],
 ): UserBalance[] {
   const paid = new Map<string, number>();
   const share = new Map<string, number>();
@@ -48,6 +55,13 @@ export function computeGroupBalances(
   for (const s of splits) {
     const amt = Number(s.amount);
     share.set(s.user_id, (share.get(s.user_id) ?? 0) + amt);
+  }
+
+  for (const s of settlements ?? []) {
+    const amt = Number(s.amount);
+    // Settlement payment reduces sender debt and receiver credit.
+    paid.set(s.sender_id, (paid.get(s.sender_id) ?? 0) + amt);
+    share.set(s.receiver_id, (share.get(s.receiver_id) ?? 0) + amt);
   }
 
   const userIds = new Set<string>([

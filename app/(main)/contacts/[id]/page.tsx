@@ -1,4 +1,5 @@
 import { getContactLedgerBalance, getTransactionsForContactRow } from "@/app/actions/debt";
+import { ContactSettleBalance } from "@/components/debt/contact-settle-balance";
 import { DeleteTransactionDialog } from "@/components/debt/delete-transaction-dialog";
 import { describeDebtTransactionForViewer } from "@/lib/debt/describe-transaction";
 import { formatDebtBalanceLabel } from "@/lib/debt/balance";
@@ -73,9 +74,16 @@ export default async function ContactDetailPage({ params }: Props) {
         >
           {balanceLabel}
         </p>
-        <Link href="/ledger" className={cn(buttonVariants({ size: "sm" }), "mt-4 inline-flex")}>
-          Add transaction
-        </Link>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <ContactSettleBalance
+            contactId={contact.id}
+            contactName={contact.name}
+            balance={balance}
+          />
+          <Link href="/ledger" className={cn(buttonVariants({ size: "sm" }), "inline-flex")}>
+            Add transaction
+          </Link>
+        </div>
       </div>
 
       <Card className="border-border/60 bg-card/70 shadow-card backdrop-blur">

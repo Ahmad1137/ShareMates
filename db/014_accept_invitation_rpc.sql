@@ -54,8 +54,13 @@ BEGIN
     SET name = EXCLUDED.name,
         email = EXCLUDED.email;
 
-  INSERT INTO public.members (group_id, user_id)
-  VALUES (v_invite.group_id, uid)
+  INSERT INTO public.members (group_id, user_id, included_in_previous, joined_at)
+  VALUES (
+    v_invite.group_id,
+    uid,
+    COALESCE(v_invite.include_in_previous, false),
+    now()
+  )
   ON CONFLICT (group_id, user_id) DO NOTHING;
 
   IF v_invite.status = 'pending' THEN
