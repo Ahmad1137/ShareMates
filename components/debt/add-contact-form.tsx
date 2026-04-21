@@ -24,13 +24,8 @@ export function AddContactForm() {
     setPending(false);
     if (res.ok) {
       form.reset();
+      router.replace(`/contacts/${res.contactId}`);
       router.refresh();
-      const successText = res.emailSent
-        ? "Contact saved. Notification email sent."
-        : res.emailSent === false
-          ? `Contact saved. Email could not be sent: ${res.emailReason}`
-          : "Contact saved.";
-      setMsg({ tone: "ok", text: successText });
     } else {
       setMsg({ tone: "err", text: res.error });
     }

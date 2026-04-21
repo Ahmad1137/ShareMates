@@ -53,8 +53,8 @@ export function LedgerForms({ contacts }: { contacts: LedgerContactOption[] }) {
     setPending(false);
     if (res.ok) {
       form.reset();
+      router.replace(`/contacts/${contactId}`);
       router.refresh();
-      router.push(`/contacts/${contactId}`);
     } else setMsg({ tone: "err", text: res.error });
   }
 
@@ -77,8 +77,8 @@ export function LedgerForms({ contacts }: { contacts: LedgerContactOption[] }) {
     setRelayPending(false);
     if (res.ok) {
       form.reset();
+      router.replace(`/contacts/${recipientContactId || lenderContactId}`);
       router.refresh();
-      router.push("/contacts");
     } else setRelayMsg({ tone: "err", text: res.error });
   }
 

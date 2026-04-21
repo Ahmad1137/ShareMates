@@ -216,7 +216,7 @@ async function fetchMergedTransactions(
 export async function addContact(
   formData: FormData,
 ): Promise<
-  | { ok: true; emailSent?: boolean; emailReason?: string }
+  | { ok: true; contactId: string; emailSent?: boolean; emailReason?: string }
   | { ok: false; error: string }
 > {
   const user = await requireUser();
@@ -241,13 +241,17 @@ export async function addContact(
     }
   }
 
-  const { error } = await supabase.from("contacts").insert({
-    user_id: user.id,
-    contact_user_id: contactUserId,
-    name,
-    email: email || "",
-  });
-  if (error) return { ok: false, error: error.message };
+  const { data: inserted, error } = await supabase
+    .from("contacts")
+    .insert({
+      user_id: user.id,
+      contact_user_id: contactUserId,
+      name,
+      email: email || "",
+    })
+    .select("id")
+    .single();
+  if (error || !inserted?.id) return { ok: false, error: error?.message ?? "Could not save contact." };
 
   let emailSent = undefined;
   let emailReason = undefined;
@@ -264,7 +268,7 @@ export async function addContact(
   revalidatePath("/contacts");
   revalidatePath("/dashboard");
   revalidatePath("/ledger");
-  return { ok: true, emailSent, emailReason };
+  return { ok: true, contactId: inserted.id, emailSent, emailReason };
 }
 
 export type AddTransactionInput = {
