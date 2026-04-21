@@ -456,8 +456,10 @@ export async function getTransactionsForContactRow(
 ): Promise<{
   contact: ContactRow;
   transactions: DebtTransactionRow[];
+  canManage: boolean;
 } | null> {
-  const contact = await getMyContactRow(contactRowId);
+  const user = await requireUser();
+  const contact = await getAccessibleContactRow(contactRowId);
   if (!contact) return null;
   const supabase = await createClient();
   const transactions = await fetchMergedTransactions(
@@ -465,7 +467,7 @@ export async function getTransactionsForContactRow(
     contact,
     supabase,
   );
-  return { contact, transactions };
+  return { contact, transactions, canManage: contact.user_id === user.id };
 }
 
 /**
@@ -478,39 +480,45 @@ export async function getContactLedgerBalance(
   contactRowId: string,
 ): Promise<number> {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("get_contact_ledger_balance", {
-    p_owner: ownerId,
-    p_contact: contactRowId,
-  });
-  if (!error) return Number(data ?? 0);
+  const contact = await getAccessibleContactRow(contactRowId);
+  if (!contact) return 0;
+  const isOwnerView = contact.user_id === ownerId;
+  const isCounterpartyView = contact.contact_user_id === ownerId;
+  if (!isOwnerView && !isCounterpartyView) return 0;
 
-  const msg = error.message ?? "";
-  if (!isMissingContactLedgerRpc(msg, error.code)) {
-    throw new Error(msg);
+  const canonicalOwnerId = contact.user_id;
+  if (isOwnerView) {
+    const { data, error } = await supabase.rpc("get_contact_ledger_balance", {
+      p_owner: ownerId,
+      p_contact: contactRowId,
+    });
+    if (!error) return Number(data ?? 0);
+
+    const msg = error.message ?? "";
+    if (!isMissingContactLedgerRpc(msg, error.code)) {
+      throw new Error(msg);
+    }
   }
 
-  const contact = await getMyContactRow(contactRowId);
-  if (!contact || contact.user_id !== ownerId) return 0;
-
   try {
-    const txs = await fetchMergedTransactions(
-      ownerId,
-      contact,
-      supabase,
-    );
-    return computeContactLedgerBalanceFromTransactions(
-      ownerId,
+    const txs = await fetchMergedTransactions(canonicalOwnerId, contact, supabase);
+    const ownerBalance = computeContactLedgerBalanceFromTransactions(
+      canonicalOwnerId,
       contact.id,
       contact.contact_user_id,
       txs,
     );
+    return isOwnerView ? ownerBalance : -ownerBalance;
   } catch {
     if (contact.contact_user_id) {
       const r = await supabase.rpc("get_debt_balance", {
-        p_me: ownerId,
+        p_me: canonicalOwnerId,
         p_counterparty: contact.contact_user_id,
       });
-      if (!r.error) return Number(r.data ?? 0);
+      if (!r.error) {
+        const ownerBalance = Number(r.data ?? 0);
+        return isOwnerView ? ownerBalance : -ownerBalance;
+      }
     }
     return 0;
   }
@@ -521,15 +529,21 @@ export async function listContactsWithBalances(): Promise<
 > {
   const user = await requireUser();
   const supabase = await createClient();
-  const { data: contacts, error } = await supabase
+  const { data: ownedContacts, error: ownedError } = await supabase
     .from("contacts")
     .select("id, user_id, contact_user_id, name, email, created_at")
     .eq("user_id", user.id)
     .order("name");
+  if (ownedError) throw new Error(ownedError.message);
+  const { data: sharedContacts, error: sharedError } = await supabase
+    .from("contacts")
+    .select("id, user_id, contact_user_id, name, email, created_at")
+    .eq("contact_user_id", user.id)
+    .neq("user_id", user.id)
+    .order("name");
+  if (sharedError) throw new Error(sharedError.message);
 
-  if (error) throw new Error(error.message);
-
-  const rows = (contacts ?? []) as ContactRow[];
+  const rows = [...((ownedContacts ?? []) as ContactRow[]), ...((sharedContacts ?? []) as ContactRow[])];
   const out: (ContactRow & { balance: number; balanceLabel: string })[] = [];
 
   const unlinkedEmails = rows
@@ -554,7 +568,7 @@ export async function listContactsWithBalances(): Promise<
 
   for (const c of rows) {
     let contactUserId = c.contact_user_id;
-    if (!contactUserId && c.email) {
+    if (c.user_id === user.id && !contactUserId && c.email) {
       const matchedId = emailToUserId.get(c.email);
       if (matchedId && matchedId !== user.id) {
         contactUserId = matchedId;
@@ -594,6 +608,21 @@ export async function getMyContactRow(
     .select("id, user_id, contact_user_id, name, email, created_at")
     .eq("id", contactRowId)
     .eq("user_id", user.id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as ContactRow | null) ?? null;
+}
+
+export async function getAccessibleContactRow(
+  contactRowId: string,
+): Promise<ContactRow | null> {
+  const user = await requireUser();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("contacts")
+    .select("id, user_id, contact_user_id, name, email, created_at")
+    .eq("id", contactRowId)
+    .or(`user_id.eq.${user.id},contact_user_id.eq.${user.id}`)
     .maybeSingle();
   if (error) throw new Error(error.message);
   return (data as ContactRow | null) ?? null;

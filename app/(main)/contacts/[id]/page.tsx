@@ -28,7 +28,7 @@ export default async function ContactDetailPage({ params }: Props) {
   const bundle = await getTransactionsForContactRow(id);
   if (!bundle) notFound();
 
-  const { contact, transactions } = bundle;
+  const { contact, transactions, canManage } = bundle;
   const balance = await getContactLedgerBalance(user.id, contact.id);
   const balanceLabel = formatDebtBalanceLabel(balance);
 
@@ -74,16 +74,22 @@ export default async function ContactDetailPage({ params }: Props) {
         >
           {balanceLabel}
         </p>
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <ContactSettleBalance
-            contactId={contact.id}
-            contactName={contact.name}
-            balance={balance}
-          />
-          <Link href="/ledger" className={cn(buttonVariants({ size: "sm" }), "inline-flex")}>
-            Add transaction
-          </Link>
-        </div>
+        {canManage ? (
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <ContactSettleBalance
+              contactId={contact.id}
+              contactName={contact.name}
+              balance={balance}
+            />
+            <Link href="/ledger" className={cn(buttonVariants({ size: "sm" }), "inline-flex")}>
+              Add transaction
+            </Link>
+          </div>
+        ) : (
+          <p className="mt-4 text-xs text-muted-foreground">
+            Shared view only — only the contact owner can edit or delete entries.
+          </p>
+        )}
       </div>
 
       <Card className="border-border/60 bg-card/70 shadow-card backdrop-blur">
@@ -108,12 +114,14 @@ export default async function ContactDetailPage({ params }: Props) {
                   key={t.id}
                   className="rounded-lg border border-border/50 bg-background/50 px-3 py-2 text-sm"
                 >
-                  <div className="mb-1 flex justify-end">
-                    <DeleteTransactionDialog
-                      contactId={contact.id}
-                      transactionId={t.id}
-                    />
-                  </div>
+                  {canManage ? (
+                    <div className="mb-1 flex justify-end">
+                      <DeleteTransactionDialog
+                        contactId={contact.id}
+                        transactionId={t.id}
+                      />
+                    </div>
+                  ) : null}
                   <p>
                     {describeDebtTransactionForViewer(
                       t,
