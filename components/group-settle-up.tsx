@@ -39,6 +39,10 @@ export function GroupSettleUp({
     [rows, currentUserId],
   );
   const iOwe = (me?.net ?? 0) < -0.009;
+  const selectedCreditor = creditors.find((c) => c.userId === receiverId) ?? null;
+  const maxPayable = selectedCreditor
+    ? Math.min(Math.abs(me?.net ?? 0), selectedCreditor.net)
+    : 0;
 
   function openDialog(prefill?: { receiverId: string; amount: number }) {
     setError(null);
@@ -56,10 +60,19 @@ export function GroupSettleUp({
     e.preventDefault();
     setError(null);
     startTransition(async () => {
+      const numericAmount = Number(amount);
+      if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+        setError("Enter a valid amount greater than zero.");
+        return;
+      }
+      if (numericAmount > maxPayable + 0.0001) {
+        setError("You cannot pay more than the remaining balance");
+        return;
+      }
       const res = await createGroupSettlement({
         groupId,
         receiverId,
-        amount: Number(amount),
+        amount: numericAmount,
         note,
       });
       if ("error" in res && res.error) {
@@ -141,10 +154,16 @@ export function GroupSettleUp({
                 type="number"
                 min="0.01"
                 step="0.01"
+                max={maxPayable > 0 ? maxPayable.toFixed(2) : undefined}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 required
               />
+              {maxPayable > 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Remaining balance: ${maxPayable.toFixed(2)}
+                </p>
+              ) : null}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="settle-note">Note (optional)</Label>

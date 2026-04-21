@@ -317,6 +317,18 @@ export async function addTransaction(
     } else {
       return { ok: false, error: "Choose who made the settlement payment." };
     }
+
+    const currentBalance = await getContactLedgerBalance(user.id, contact_id);
+    const maxSettle = Math.abs(currentBalance);
+    if (maxSettle < 0.009) {
+      return { ok: false, error: "This contact is already settled." };
+    }
+    if (amount > maxSettle + 0.0001) {
+      return {
+        ok: false,
+        error: "You cannot pay more than the remaining balance",
+      };
+    }
   }
 
   const modernRow = {

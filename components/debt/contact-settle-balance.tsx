@@ -32,14 +32,24 @@ export function ContactSettleBalance({
   const router = useRouter();
 
   const iOwe = balance < 0;
+  const maxSettle = Math.abs(balance);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     startTransition(async () => {
+      const numericAmount = Number(amount);
+      if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+        setError("Enter a valid amount greater than zero.");
+        return;
+      }
+      if (numericAmount > maxSettle + 0.0001) {
+        setError("You cannot pay more than the remaining balance");
+        return;
+      }
       const res = await addTransaction({
         contactId,
-        amount,
+        amount: numericAmount.toString(),
         flow: "settled",
         settleDirection: iOwe ? "i_paid_them" : "they_paid_me",
         note,
@@ -83,10 +93,14 @@ export function ContactSettleBalance({
                 type="number"
                 min="0.01"
                 step="0.01"
+                max={maxSettle.toFixed(2)}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 required
               />
+              <p className="text-xs text-muted-foreground">
+                Remaining balance: ${maxSettle.toFixed(2)}
+              </p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="contact-settle-note">Note (optional)</Label>
